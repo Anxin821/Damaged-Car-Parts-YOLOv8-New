@@ -1,0 +1,155 @@
+/* 全局样式 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f5f5f5;
+  color: #333;
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* 按钮样式 */
+.btn {
+  display: inline-block;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+
+.btn-primary {
+  background-color: #409eff;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #66b1ff;
+}
+
+/* 卡片样式 */
+.card {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+/* 表单样式 */
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.form-control {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: #409eff;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .container {
+    padding: 0 16px;
+  }
+  
+  .btn {
+    padding: 12px 24px;
+    font-size: 18px;
+  }
+  
+  .card {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  
+  .form-control {
+    padding: 12px;
+    font-size: 18px;
+  }
+}
+
+/* 苹果14Pro max适配 (428px 宽度) */
+@media (max-width: 428px) {
+  body {
+    font-size: 16px;
+  }
+  
+  .container {
+    padding: 0 12px;
+  }
+  
+  .btn {
+    padding: 14px 28px;
+    font-size: 18px;
+    width: 100%;
+    text-align: center;
+  }
+  
+  .card {
+    padding: 16px;
+    margin-bottom: 16px;
+    border-radius: 12px;
+  }
+  
+  .form-control {
+    padding: 14px;
+    font-size: 18px;
+  }
+  
+  /* 调整图片上传区域 */
+  .upload-zone {
+    height: 200px;
+  }
+  
+  /* 调整检测结果显示 */
+  .result-display {
+    padding: 12px;
+  }
+  
+  /* 调整损伤列表 */
+  .damage-list {
+    padding: 0;
+  }
+  
+  /* 调整成本汇总 */
+  .cost-summary {
+    padding: 16px;
+  }
+  
+  /* 调整导航栏 */
+  .navbar {
+    padding: 12px;
+  }
+  
+  /* 调整页脚 */
+  .footer {
+    padding: 16px;
+    text-align: center;
+  }
+}
