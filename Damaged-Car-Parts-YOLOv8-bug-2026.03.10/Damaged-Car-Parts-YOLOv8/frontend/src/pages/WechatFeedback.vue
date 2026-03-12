@@ -21,9 +21,9 @@
         <div class="field">
           <div class="label">反馈类型</div>
           <el-radio-group v-model="category">
-            <el-radio label="GENERAL">产品建议</el-radio>
-            <el-radio label="BUG">功能异常</el-radio>
-            <el-radio label="UX">体验/交互</el-radio>
+            <el-radio value="GENERAL">产品建议</el-radio>
+            <el-radio value="BUG">功能异常</el-radio>
+            <el-radio value="UX">体验/交互</el-radio>
           </el-radio-group>
         </div>
 

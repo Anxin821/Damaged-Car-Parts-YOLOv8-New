@@ -199,18 +199,18 @@
         <div class="filter-section">
           <div class="filter-label">状态</div>
           <el-radio-group v-model="filters.status" class="filter-options">
-            <el-radio-button label="all">全部</el-radio-button>
-            <el-radio-button label="pending">待处理</el-radio-button>
-            <el-radio-button label="completed">已完成</el-radio-button>
+            <el-radio-button value="all">全部</el-radio-button>
+            <el-radio-button value="pending">待处理</el-radio-button>
+            <el-radio-button value="completed">已完成</el-radio-button>
           </el-radio-group>
         </div>
         <div class="filter-section">
           <div class="filter-label">时间范围</div>
           <el-radio-group v-model="filters.timeRange" class="filter-options">
-            <el-radio-button label="all">全部</el-radio-button>
-            <el-radio-button label="today">今天</el-radio-button>
-            <el-radio-button label="week">本周</el-radio-button>
-            <el-radio-button label="month">本月</el-radio-button>
+            <el-radio-button value="all">全部</el-radio-button>
+            <el-radio-button value="today">今天</el-radio-button>
+            <el-radio-button value="week">本周</el-radio-button>
+            <el-radio-button value="month">本月</el-radio-button>
           </el-radio-group>
         </div>
       </div>

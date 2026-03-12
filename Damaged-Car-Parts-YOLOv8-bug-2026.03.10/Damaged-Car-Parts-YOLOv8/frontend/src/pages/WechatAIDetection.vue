@@ -69,12 +69,6 @@
           
           <!-- 检测结果头部 -->
           <div class="result-top-section">
-            <!-- 成功状态指示器 -->
-            <div class="success-indicator">
-              <el-icon class="success-icon"><CircleCheck /></el-icon>
-              <span class="success-text">检测完成</span>
-            </div>
-            
             <!-- 核心数据概览 -->
             <div class="data-overview">
               <div class="overview-item">
@@ -122,7 +116,6 @@
           
           <!-- 检测结果图片 -->
           <div class="detection-images-section">
-            <div class="section-title">检测结果图片</div>
             <div v-if="detectionResult?.images?.length" class="result-images">
               <el-card v-for="img in detectionResult.images" :key="img.id" class="result-image-wrap" shadow="hover">
                 <el-image 
@@ -719,6 +712,7 @@ const getSeverityLevels = computed(() => {
   top: 0;
   left: 0;
   right: 0;
+  z-index: 1000;
 }
 
 .nav-left {
@@ -776,6 +770,10 @@ const getSeverityLevels = computed(() => {
 
 .upload-card :deep(.el-card__body) {
   padding: 40px 20px;
+}
+
+.result-card :deep(.el-card) {
+  --el-card-padding: 8px;
 }
 
 .upload-content {
@@ -857,6 +855,11 @@ const getSeverityLevels = computed(() => {
 /* 结果区域 */
 .result-area {
   flex: 1;
+  padding: 0px;
+}
+
+.result-area :deep(.el-card__body) {
+  padding: 0px;
 }
 
 .result-card {
@@ -868,7 +871,7 @@ const getSeverityLevels = computed(() => {
 .result-header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   margin: -16px;
-  padding: 20px;
+  padding: 10px;
   border-radius: 16px 16px 0 0;
 }
 
@@ -877,33 +880,18 @@ const getSeverityLevels = computed(() => {
   font-size: 20px;
   font-weight: 600;
   color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
 }
 
 /* 检测结果顶部区域 */
 .result-top-section {
-  padding: 24px 0;
+  padding: 0px;
   text-align: center;
   border-bottom: 1px solid #f0f0f0;
-  margin-bottom: 24px;
-}
-
-.success-indicator {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 20px;
-}
-
-.success-icon {
-  font-size: 24px;
-  color: #67c23a;
-}
-
-.success-text {
-  font-size: 18px;
-  font-weight: 600;
-  color: #67c23a;
+  margin-bottom: 0px;
 }
 
 .data-overview {
@@ -914,19 +902,27 @@ const getSeverityLevels = computed(() => {
 
 .overview-item {
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .overview-number {
   font-size: 28px;
   font-weight: 700;
   color: #4096ee;
-  line-height: 1;
-  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .overview-label {
   font-size: 14px;
   color: #909399;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-weight: 500;
 }
 
@@ -942,7 +938,7 @@ const getSeverityLevels = computed(() => {
 
 /* 车辆信息区域 */
 .vehicle-info-section {
-  margin-bottom: 32px;
+  margin-bottom: 16px;
 }
 
 .vehicle-cards {
@@ -980,12 +976,19 @@ const getSeverityLevels = computed(() => {
 
 .card-content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .card-title {
   font-size: 12px;
   color: #909399;
   margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .card-value {
@@ -993,16 +996,22 @@ const getSeverityLevels = computed(() => {
   font-weight: 600;
   color: #303133;
   margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .card-subtitle {
   font-size: 12px;
   color: #606266;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* 检测结果图片区域 */
 .detection-images-section {
-  margin-bottom: 32px;
+  margin-bottom: 16px;
 }
 
 .result-images {
@@ -1016,6 +1025,8 @@ const getSeverityLevels = computed(() => {
   border-radius: 12px;
   overflow: hidden;
   transition: all 0.3s ease;
+  max-height: 350px;
+  z-index: 1;
 }
 
 .result-image-wrap:hover {
@@ -1025,13 +1036,16 @@ const getSeverityLevels = computed(() => {
 
 .result-image {
   width: 100%;
+  height: 300px;
   max-height: 350px;
   border-radius: 12px;
+  object-fit: contain;
+  background: #f8f9fa;
 }
 
 /* 损伤分析区域 */
 .damage-analysis-section {
-  margin-bottom: 32px;
+  margin-bottom: 16px;
 }
 
 .analysis-grid {
@@ -1074,17 +1088,16 @@ const getSeverityLevels = computed(() => {
 }
 
 .analysis-label {
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 4px;
-  font-weight: 500;
-}
-
-.analysis-value {
   font-size: 14px;
   font-weight: 600;
   color: #303133;
-  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.analysis-value {
+  font-size: 16px;
+  color: #4096ee;
+  font-weight: 600;
 }
 
 /* 操作按钮 */
