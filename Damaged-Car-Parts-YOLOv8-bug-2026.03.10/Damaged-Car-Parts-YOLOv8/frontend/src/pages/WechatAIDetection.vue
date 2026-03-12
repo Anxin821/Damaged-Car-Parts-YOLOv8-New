@@ -1052,7 +1052,7 @@ const getSeverityLevels = computed(() => {
 .analysis-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 12px;
+  gap: 0px;
 }
 
 .analysis-card {
@@ -1062,14 +1062,7 @@ const getSeverityLevels = computed(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  transition: all 0.3s ease;
   border-left: 4px solid transparent;
-}
-
-.analysis-card:hover {
-  background: #e2e8f0;
-  border-left-color: #4096ee;
-  transform: translateX(4px);
 }
 
 .analysis-icon {
