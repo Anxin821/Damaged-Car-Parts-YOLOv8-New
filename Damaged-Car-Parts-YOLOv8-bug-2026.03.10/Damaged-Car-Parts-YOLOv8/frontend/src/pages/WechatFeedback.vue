@@ -1,11 +1,7 @@
 <template>
   <div class="wechat-feedback">
     <!-- 导航栏 -->
-    <div class="nav-bar">
-      <el-button :icon="ArrowLeft" @click="goBack" circle text />
-      <div class="nav-title">意见与反馈</div>
-      <el-button :icon="HomeFilled" @click="goHome" circle text />
-    </div>
+    <WechatNavBar title="意见与反馈" :showHome="true" />
 
     <div class="content">
       <div class="card">
@@ -58,10 +54,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { feedbackApi } from '../api'
-import {
-  ArrowLeft,
-  HomeFilled
-} from '@element-plus/icons-vue'
+import WechatNavBar from '../components/common/WechatNavBar.vue'
 
 const router = useRouter()
 
@@ -69,12 +62,6 @@ const contact = ref('')
 const category = ref('GENERAL')
 const content = ref('')
 const submitting = ref(false)
-
-const goBack = () => router.back()
-
-const goHome = () => {
-  router.push('/')
-}
 
 const submit = async () => {
   if (submitting.value) return
@@ -107,32 +94,6 @@ const submit = async () => {
 .wechat-feedback {
   min-height: 100vh;
   background: #f5f7fa;
-}
-
-/* 导航栏 */
-.nav-bar {
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-  background: #fff;
-  border-bottom: 1px solid #ebeef5;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.nav-title {
-  flex: 1;
-  text-align: center;
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
-  margin: 0;
 }
 
 /* 主内容区 */
@@ -204,10 +165,6 @@ const submit = async () => {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .nav-bar {
-    justify-content: center;
-  }
-  
   .content {
     padding: 16px 12px;
     padding-top: 60px;

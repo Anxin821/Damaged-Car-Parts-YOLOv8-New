@@ -131,7 +131,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 30px 70px rgba(0, 0, 0, 0.25);
   position: relative;
   --phone-safe-top: 36px;
-  --phone-safe-bottom: 8px;
+  --phone-safe-bottom: 0px;
 }
 
 .phone-frame::before {

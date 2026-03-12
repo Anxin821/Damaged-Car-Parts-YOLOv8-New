@@ -1,18 +1,7 @@
 <template>
   <div class="wechat-ai-detection">
     <!-- 导航栏 -->
-    <el-row class="nav-bar" justify="space-between" align="middle">
-      <el-col :span="4" class="nav-left" @click="goBack">
-        <el-icon><ArrowLeft /></el-icon>
-      </el-col>
-      <el-col :span="16" class="nav-title">AI 智能定损</el-col>
-      <el-col :span="4" class="nav-right">
-        <el-space :size="8">
-          <el-icon class="nav-icon" @click="goHome"><HomeFilled /></el-icon>
-          <el-icon class="nav-icon" @click="showHelp"><QuestionFilled /></el-icon>
-        </el-space>
-      </el-col>
-    </el-row>
+    <WechatNavBar title="AI 智能定损" :showHome="true" />
     
     <!-- 隐藏的文件输入 -->
     <input type="file" ref="fileInput" multiple accept="image/*" style="display: none" @change="handleFileSelect">
@@ -245,10 +234,8 @@ import { ref, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { detectionApi, repairApi } from '../api'
 import { useDetectionStore } from '../store/detection'
+import WechatNavBar from '../components/common/WechatNavBar.vue'
 import { 
-  ArrowLeft, 
-  HomeFilled, 
-  QuestionFilled, 
   Picture, 
   Close, 
   Camera, 
@@ -272,14 +259,6 @@ const isDetecting = ref(false)
 const detectionResult = ref(null)
 const resultImageMeta = ref({})
 let cameraStream = null
-
-const goBack = () => {
-  router.back()
-}
-
-const goHome = () => {
-  router.push('/')
-}
 
 const showHelp = () => {
   alert('AI智能定损使用说明：\n1. 上传车辆破损照片\n2. 系统会自动检测损伤\n3. 查看详细定损报告')
@@ -700,49 +679,6 @@ const getSeverityLevels = computed(() => {
   position: relative;
   overflow-x: hidden;
 }
-/* 导航栏 */
-.nav-bar {
-  background: linear-gradient(90deg, #4096EE, #54C5F8, #66D3A8);
-  height: 44px;
-  padding: 0 16px;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-}
-
-.nav-left {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  color: white;
-}
-
-.nav-right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.nav-icon {
-  width: 44px;
-  height: 44px;
-  color: white;
-}
-
-.nav-icon:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.nav-title {
-  text-align: center;
-  font-size: 16px;
-  font-weight: 600;
-  color: white;
-  margin: 0;
-}
-
 /* 主内容区 */
 .main-content {
   padding-top: 44px;
@@ -750,7 +686,7 @@ const getSeverityLevels = computed(() => {
   padding: 64px 16px 0px 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
 }
 
 /* 上传卡片 */
@@ -847,6 +783,7 @@ const getSeverityLevels = computed(() => {
   font-size: 16px;
   font-weight: 600;
   border-radius: 8px;
+  margin: 0px 0;
 }
 
 /* 结果区域 */
@@ -1097,6 +1034,7 @@ const getSeverityLevels = computed(() => {
 /* 操作按钮 */
 .result-buttons {
   margin-top: 0px;
+  margin-bottom: 8px;
   padding: 0px 16px;
   border-top: 1px solid #f0f0f0;
   display: flex;

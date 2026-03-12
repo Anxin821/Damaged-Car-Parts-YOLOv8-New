@@ -1,18 +1,7 @@
 <template>
   <div class="wechat-dashboard">
     <!-- 导航栏 -->
-    <el-row class="nav-bar" justify="space-between" align="middle">
-      <el-col :span="4" class="nav-left" @click="goBack">
-        <el-icon><ArrowLeft /></el-icon>
-      </el-col>
-      <el-col :span="16" class="nav-title">定损看板</el-col>
-      <el-col :span="4" class="nav-right">
-        <el-space :size="8">
-          <el-icon class="nav-icon" @click="goHome"><HomeFilled /></el-icon>
-          <el-icon class="nav-icon" @click="openFilter"><Filter /></el-icon>
-        </el-space>
-      </el-col>
-    </el-row>
+    <WechatNavBar title="定损看板" :showHome="true" />
     
     <!-- 主内容区 -->
     <div class="main-content">
@@ -229,10 +218,8 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDetectionStore } from '../store/detection'
+import WechatNavBar from '../components/common/WechatNavBar.vue'
 import { 
-  ArrowLeft, 
-  HomeFilled, 
-  Filter, 
   Grid, 
   Clock, 
   CircleCheck, 
@@ -370,14 +357,6 @@ const filters = ref({
   timeRange: 'all'
 })
 
-const goHome = () => {
-  router.push('/')
-}
-
-const goBack = () => {
-  router.back()
-}
-
 const openFilter = () => {
   showFilterModal.value = true
 }
@@ -425,90 +404,6 @@ const viewRecord = (id) => {
     background-color: #f5f7fa;
     position: relative;
     overflow-x: hidden;
-  }
-
-  /* 导航栏 */
-  .nav-bar {
-    background: linear-gradient(90deg, #4096EE, #54C5F8, #66D3A8);
-    height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 16px;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1000;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  .nav-left {
-    width: 44px;
-    height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    cursor: pointer;
-  }
-
-  .nav-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .nav-icon {
-    width: 44px;
-    height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    cursor: pointer;
-    border-radius: 50%;
-    transition: background-color 0.3s ease;
-  }
-
-  .nav-icon:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .nav-title {
-    flex: 1;
-    text-align: center;
-    font-size: 16px;
-    font-weight: 600;
-    color: white;
-    margin: 0;
-  }
-
-  @media (max-width: 768px) {
-    .nav-bar {
-      justify-content: center;
-    }
-
-    .nav-left {
-      position: absolute;
-      left: 0;
-    }
-
-    .nav-right {
-      position: absolute;
-      right: 0;
-    }
-
-    .nav-title {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 60%;
-      text-align: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
   }
 
   /* 主内容区 */
