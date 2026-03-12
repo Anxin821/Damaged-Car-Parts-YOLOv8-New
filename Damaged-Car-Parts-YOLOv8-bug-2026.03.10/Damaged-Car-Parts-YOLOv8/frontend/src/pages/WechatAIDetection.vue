@@ -138,9 +138,8 @@
             <el-empty v-else description="暂无检测图片" />
           </div>
           
-          <!-- 损伤详情分析 -->
+          <!-- 损伤详情 -->
           <div class="damage-analysis-section" v-if="detectionResult">
-            <div class="section-title">损伤详情分析</div>
             <div class="analysis-grid">
               <div class="analysis-card" v-if="getDamageParts.length > 0">
                 <div class="analysis-icon">
@@ -176,14 +175,12 @@
           
           <!-- 操作按钮 -->
           <div class="result-buttons">
-            <el-space :size="12" style="width: 100%">
-              <el-button type="primary" size="large" @click="viewReport" style="flex: 1">
-                查看详细定损报告
-              </el-button>
-              <el-button type="success" size="large" @click="preRepairAnalysis" style="flex: 1">
-                预修车分析
-              </el-button>
-            </el-space>
+            <el-button type="primary" size="large" @click="viewReport" class="result-button">
+              查看详细定损报告
+            </el-button>
+            <el-button type="success" size="large" @click="preRepairAnalysis" class="result-button">
+              预修车分析
+            </el-button>
           </div>
         </el-card>
       </div>
@@ -750,7 +747,7 @@ const getSeverityLevels = computed(() => {
 .main-content {
   padding-top: 44px;
   min-height: calc(100vh - 44px);
-  padding: 64px 16px 20px;
+  padding: 64px 16px 0px 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -928,12 +925,16 @@ const getSeverityLevels = computed(() => {
 
 /* 节标题 */
 .section-title {
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 600;
   color: #303133;
-  margin-bottom: 16px;
+  margin: 10px 0;
   padding-left: 8px;
   border-left: 3px solid #4096ee;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* 车辆信息区域 */
@@ -1102,9 +1103,13 @@ const getSeverityLevels = computed(() => {
 
 /* 操作按钮 */
 .result-buttons {
-  margin-top: 24px;
-  padding-top: 20px;
+  margin-top: 0px;
+  padding: 0px 16px;
   border-top: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
 }
 
 .result-buttons .el-button {
@@ -1113,6 +1118,13 @@ const getSeverityLevels = computed(() => {
   font-weight: 600;
   border-radius: 12px;
   transition: all 0.3s ease;
+  flex: 1;
+  min-width: 0;
+}
+
+.result-button {
+  flex: 1;
+  min-width: 0;
 }
 
 .result-buttons .el-button:hover {
