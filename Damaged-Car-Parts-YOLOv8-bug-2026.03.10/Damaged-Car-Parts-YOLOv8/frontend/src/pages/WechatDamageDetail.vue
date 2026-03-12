@@ -52,18 +52,16 @@
       <!-- 破损照片 -->
       <div class="damage-image-container" v-if="damageInfo.currentImage">
         <h3 class="section-title">破损照片</h3>
-        <el-card class="damage-image-card" shadow="hover" @click="toggleImageZoom">
+        <el-card class="damage-image-card" shadow="hover" @click="openImagePreview">
           <el-image 
             :src="damageInfo.currentImage" 
             alt="破损照片" 
             class="damage-image"
             fit="contain"
-            :preview-src-list="[damageInfo.currentImage]"
-            :initial-index="0"
             @error="onImageError"
           />
         </el-card>
-        <div class="image-hint">点击放大查看</div>
+        <div class="image-hint">点击放大查看（带破损标注）</div>
       </div>
 
       <!-- 破损详情表 -->
@@ -165,7 +163,7 @@
       <template #header="{ close }">
         <div class="ai-analysis-header">
           <div class="ai-analysis-title">
-            <el-icon><Robot /></el-icon>
+            <el-icon><Cpu /></el-icon>
             AI定损分析报告
           </div>
           <el-button @click="close" :icon="Close" circle size="small" />
@@ -187,6 +185,51 @@
         <el-empty v-else description="点击'查看详细定损报告'按钮生成智能定损报告" />
       </div>
     </el-dialog>
+
+    <!-- 图片放大预览弹窗（带破损标注） -->
+    <el-dialog
+      v-model="showImagePreview"
+      width="95%"
+      :show-close="false"
+      class="image-preview-dialog"
+    >
+      <template #header="{ close }">
+        <div class="preview-header">
+          <span>破损部位标注图</span>
+          <el-button @click="close" :icon="Close" circle size="small" />
+        </div>
+      </template>
+      
+      <div class="preview-body" v-if="damageInfo.currentImage">
+        <div class="preview-image-container">
+          <el-image
+            :src="damageInfo.currentImage"
+            fit="contain"
+            class="preview-image"
+          />
+          <!-- 破损标注框 -->
+          <div 
+            v-for="(region, index) in damageInfo.regions" 
+            :key="index"
+            class="damage-highlight-box"
+            :style="getBoxStyle(region.bbox)"
+          >
+            <div class="highlight-label">{{ region.location }} ({{ region.level }})</div>
+          </div>
+        </div>
+        
+        <!-- 图例说明 -->
+        <div class="preview-legend">
+          <div class="legend-title">破损部位列表</div>
+          <div class="legend-list">
+            <div v-for="(region, index) in damageInfo.regions" :key="index" class="legend-item">
+              <div class="legend-color" :style="{ background: getBoxColor(index) }"></div>
+              <span class="legend-text">{{ index + 1 }}. {{ region.location }} - {{ region.type }} ({{ region.level }})</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -200,7 +243,7 @@ import {
   Check, 
   Phone, 
   Loading, 
-  Robot, 
+  Cpu, 
   Document, 
   Close 
 } from '@element-plus/icons-vue'
@@ -211,6 +254,7 @@ const detectionStore = useDetectionStore()
 const imageZoomed = ref(false)
 const currentImageIndex = ref(0)
 const showAIAnalysis = ref(false)
+const showImagePreview = ref(false)
 
 // 从 store 获取 LLM 分析状态
 const llmLoading = computed(() => detectionStore.llmLoading)
@@ -298,7 +342,8 @@ const damageInfo = computed(() => {
     location: partMap[region.part_code] || region.part_code || '未知部位',
     type: damageTypeToText(region.damage_type),
     level: severityToText(region.severity_level),
-    levelClass: severityToClass(region.severity_level)
+    levelClass: severityToClass(region.severity_level),
+    bbox: region.bbox
   }))
 
   // 处理预算
@@ -330,16 +375,38 @@ const damageInfo = computed(() => {
     damageDetails,
     budgetDetails,
     totalBudget,
-    currentImage: allImages[currentImageIndex.value] || allImages[0] || ''
+    currentImage: allImages[currentImageIndex.value] || allImages[0] || '',
+    regions: damageDetails
   }
 })
 
-const toggleImageZoom = () => { imageZoomed.value = !imageZoomed.value }
+const openImagePreview = () => { showImagePreview.value = true }
 const goBack = () => { router.push('/wechat-detection') }
 const goHome = () => { router.push('/') }
 const confirmDamage = () => { alert('确认定损') }
 const contactWorkshop = () => { alert('联系维修厂') }
 const saveReport = () => { alert('保存报告') }
+
+// 计算标注框样式
+const getBoxStyle = (bbox) => {
+  if (!bbox) return {}
+  const coords = bbox.split(',').map(Number)
+  if (coords.length !== 4) return {}
+  
+  const [x1, y1, x2, y2] = coords
+  return {
+    left: `${Math.min(x1, x2) / 3}%`,
+    top: `${Math.min(y1, y2) / 2}%`,
+    width: `${Math.abs(x2 - x1) / 3}%`,
+    height: `${Math.abs(y2 - y1) / 2}%`
+  }
+}
+
+// 获取标注框颜色
+const getBoxColor = (index) => {
+  const colors = ['#F56C6C', '#E6A23C', '#67C23A', '#409EFF', '#909399', '#6B4C9A']
+  return colors[index % colors.length]
+}
 
 // 页面加载时检查是否有分析结果，如果有则自动显示
 onMounted(() => {
@@ -686,6 +753,100 @@ onMounted(() => {
   font-size: 14px;
 }
 
+/* 图片放大预览弹窗 */
+.image-preview-dialog :deep(.el-dialog) {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.preview-body {
+  padding: 0;
+}
+
+.preview-image-container {
+  position: relative;
+  height: 400px;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* 破损标注框 */
+.damage-highlight-box {
+  position: absolute;
+  border: 3px solid #F56C6C;
+  border-radius: 4px;
+  pointer-events: none;
+  background: rgba(245, 108, 108, 0.15);
+  box-shadow: 0 0 12px rgba(245, 108, 108, 0.6);
+}
+
+.highlight-label {
+  position: absolute;
+  top: -30px;
+  left: 0;
+  background: #F56C6C;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(245, 108, 108, 0.4);
+}
+
+/* 图例说明 */
+.preview-legend {
+  padding: 16px;
+  background: #fff;
+}
+
+.legend-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 12px;
+}
+
+.legend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.legend-text {
+  font-size: 14px;
+  color: #606266;
+}
+
 /* 响应式设计 */
 @media (max-width: 375px) {
   .main-content {
@@ -703,6 +864,15 @@ onMounted(() => {
   
   .button-text {
     font-size: 11px;
+  }
+  
+  .preview-image-container {
+    height: 300px;
+  }
+  
+  .highlight-label {
+    font-size: 12px;
+    top: -26px;
   }
 }
 </style>

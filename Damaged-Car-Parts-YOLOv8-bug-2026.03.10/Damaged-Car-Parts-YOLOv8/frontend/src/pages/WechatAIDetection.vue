@@ -165,7 +165,7 @@
           <!-- 操作按钮 -->
           <div class="result-buttons">
             <el-button type="primary" size="large" @click="viewReport" class="result-button">
-              查看详细定损报告
+              查看定损报告
             </el-button>
             <el-button type="success" size="large" @click="preRepairAnalysis" class="result-button">
               预修车分析
