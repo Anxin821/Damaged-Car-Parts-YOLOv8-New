@@ -16,7 +16,7 @@
           </div>
           <div class="upload-text">点击上传车辆破损照片</div>
           <div class="upload-subtext">单张 / 多张均可</div>
-          <div class="upload-hint">检测响应≤5 秒，识别准确率≥90%</div>
+          <div class="upload-hint">AI检测分析≤10秒，识别准确率≥90%</div>
         </div>
       </el-card>
       
@@ -44,7 +44,7 @@
         :loading="isDetecting"
         block
       >
-        {{ isDetecting ? '检测中...' : '一键检测' }}
+        {{ isDetecting ? 'AI检测分析中...' : '一键AI检测分析' }}
       </el-button>
       
       <!-- 检测结果区域 -->
@@ -414,6 +414,19 @@ const startDetection = async () => {
     detectionResult.value = normalized
     showResult.value = true
     
+    // YOLO检测完成后，自动调用LLM分析
+    console.log('YOLO检测完成，开始调用豆包API进行分析...')
+    try {
+      await detectionStore.analyzeWithLLM(detectionData.taskId)
+      console.log('豆包分析完成，跳转到定损看板页面')
+      // 分析完成后再跳转到定损看板页面
+      router.push('/wechat-dashboard')
+    } catch (err) {
+      console.error('豆包分析失败:', err)
+      // 即使分析失败，也跳转到定损看板页面，让用户看到基本检测信息
+      router.push('/wechat-dashboard')
+    }
+    
   } catch (error) {
     console.error('检测失败:', error)
     const detail =
@@ -433,14 +446,14 @@ const viewReport = async () => {
       // 先调用豆包API进行分析
       console.log('开始调用豆包API进行分析...')
       await detectionStore.analyzeWithLLM(detectionResult.value.taskId)
-      console.log('豆包分析完成，跳转到详情页面')
-      // 分析完成后再跳转到详情页面
-      router.push(`/damage-detail/${detectionResult.value.taskId}`)
+      console.log('豆包分析完成，跳转到定损看板页面')
+      // 分析完成后再跳转到定损看板页面
+      router.push('/wechat-dashboard')
     } catch (err) {
       console.error('豆包分析失败:', err)
       alert('AI分析失败: ' + (err.message || '请稍后重试'))
-      // 即使分析失败，也跳转到详情页面，让用户看到基本检测信息
-      router.push(`/damage-detail/${detectionResult.value.taskId}`)
+      // 即使分析失败，也跳转到定损看板页面，让用户看到基本检测信息
+      router.push('/wechat-dashboard')
     }
   } else {
     alert('暂无检测结果')
@@ -452,17 +465,13 @@ const preRepairAnalysis = async () => {
     try {
       // 调用预修车分析API
       const analysis = await repairApi.getPriorityAnalysis(detectionResult.value.assessmentId)
-      // 跳转到预修车分析页面并传递数据
-      router.push({
-        path: '/pre-repair',
-        query: { 
-          assessmentId: detectionResult.value.assessmentId,
-          taskId: detectionResult.value.taskId 
-        }
-      })
+      console.log('预修车分析完成，跳转到预修车分析看板页面')
+      // 跳转到预修车分析看板页面
+      router.push('/wechat-repair-dashboard')
     } catch (error) {
       console.error('获取预修车分析失败:', error)
-      alert('获取预修车分析失败，请重试')
+      // 即使分析失败，也跳转到预修车分析看板页面，让用户看到基本检测信息
+      router.push('/wechat-repair-dashboard')
     }
   } else {
     alert('暂无检测结果')

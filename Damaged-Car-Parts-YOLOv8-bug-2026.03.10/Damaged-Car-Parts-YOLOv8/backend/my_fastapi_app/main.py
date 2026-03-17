@@ -516,27 +516,67 @@ async def analyze_with_llm(task_id: str):
     damage_text = "; ".join(damage_summary) if damage_summary else "未检测到明显损伤"
     
     # 4. 构建提示词
-    prompt = f"""你是一位专业的车辆定损评估专家，严格按照以下JSON格式输出评估报告，不要添加任何多余文字：
+    prompt = f"""你是一位专业的车辆定损评估专家，请分析这张车辆损伤图片，严格按照以下JSON格式输出评估报告，不要添加任何多余文字：
+
 {{
-    "damage_confirmation": "确认的损伤部位（含遗漏检查）",
+    "vehicle_info": {{
+        "brand": "车辆品牌",
+        "model": "具体车型"
+    }},
     "damage_level": {{
         "部位1": "轻微/中等/严重",
         "部位2": "轻微/中等/严重"
     }},
     "repair_suggestion": "具体维修方案",
-    "cost_estimate": "费用区间（如：500-1000元）",
-    "safety_tips": "行车安全提示"
+    "cost_estimate": "费用区间",
+    "safety_tips": "行车安全提示",
+    "pre_repair_analysis": {{
+        "high_priority": [
+            {{
+                "part": "损伤部位名称",
+                "damage_type": "损伤类型",
+                "severity": "损伤程度",
+                "impact_analysis": "影响分析描述",
+                "repair_suggestion": "具体维修建议"
+            }}
+        ],
+        "medium_priority": [
+            {{
+                "part": "损伤部位名称",
+                "damage_type": "损伤类型",
+                "severity": "损伤程度",
+                "impact_analysis": "影响分析描述",
+                "repair_suggestion": "具体维修建议"
+            }}
+        ],
+        "low_priority": [
+            {{
+                "part": "损伤部位名称",
+                "damage_type": "损伤类型",
+                "severity": "损伤程度",
+                "impact_analysis": "影响分析描述",
+                "repair_suggestion": "具体维修建议"
+            }}
+        ]
+    }}
 }}
 
 分析依据：
 检测到的损伤信息：{damage_text}
 
 分析要求：
-1. 损伤部位确认：明确列出所有检测到的部位，检查是否有视觉可见的遗漏损伤
+1. 车辆识别：仔细观察车辆外观特征，准确识别品牌和车型，必须填写vehicle_info字段
 2. 损伤程度评估：对每个部位给出明确的严重程度
 3. 维修建议：具体到维修工艺（如钣金、喷漆、更换配件等）
 4. 费用估算：基于市场行情给出合理区间
 5. 安全提示：指出影响行车安全的关键损伤
+6. 预修车分析：按破损影响程度排序维修优先级
+   - 高优先级：涉及行车安全的紧急维修项目（如大灯、刹车系统等）
+   - 中优先级：影响使用但不危及安全的维修项目（如保险杠、车门等）
+   - 低优先级：仅外观影响的维修项目（如轻微划痕等）
+   - 每个优先级项目必须包含：部位、损伤类型、程度、影响分析、维修建议
+
+重要：必须严格按照上述JSON格式输出，不要添加任何其他字段。
 """
     
     try:

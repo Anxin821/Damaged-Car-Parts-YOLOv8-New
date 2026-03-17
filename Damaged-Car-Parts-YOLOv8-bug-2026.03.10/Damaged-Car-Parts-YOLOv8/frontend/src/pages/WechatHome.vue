@@ -81,15 +81,6 @@
     <!-- 核心功能区 -->
     <div class="feature-section">
       <div class="feature-cards-container">
-        <!-- AI 智能定损卡片 -->
-        <el-card class="feature-card" shadow="hover" @click="navigateTo('ai')">
-          <div class="card-icon ai-icon">
-            <el-icon size="24"><Edit /></el-icon>
-          </div>
-          <h3 class="card-title">AI 智能定损</h3>
-          <p class="card-description">上传车辆照片，AI 自动检测损伤</p>
-        </el-card>
-        
         <!-- 预修车分析卡片 -->
         <el-card class="feature-card" shadow="hover" @click="navigateTo('analysis')">
           <div class="card-icon analysis-icon">
@@ -97,6 +88,15 @@
           </div>
           <h3 class="card-title">预修车分析</h3>
           <p class="card-description">预估维修费用和时间</p>
+        </el-card>
+        
+        <!-- AI 智能定损卡片 -->
+        <el-card class="feature-card" shadow="hover" @click="navigateTo('ai')">
+          <div class="card-icon ai-icon">
+            <el-icon size="24"><Edit /></el-icon>
+          </div>
+          <h3 class="card-title">AI 智能定损</h3>
+          <p class="card-description">上传车辆照片，AI 自动检测损伤</p>
         </el-card>
         
         <!-- 定损看板卡片 -->
@@ -141,7 +141,7 @@ const navigateTo = (path) => {
       router.push('/detection')
       break
     case 'analysis':
-      router.push('/pre-repair')
+      router.push('/wechat-repair-dashboard')
       break
     case 'dashboard':
       router.push('/wechat-dashboard')

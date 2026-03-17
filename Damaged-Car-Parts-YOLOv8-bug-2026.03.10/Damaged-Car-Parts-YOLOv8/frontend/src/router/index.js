@@ -22,6 +22,11 @@ const routes = [
     component: () => import('../pages/WechatDashboard.vue')
   },
   {
+    path: '/wechat-repair-dashboard',
+    name: 'WechatRepairDashboard',
+    component: () => import('../pages/WechatRepairDashboard.vue')
+  },
+  {
     path: '/feedback',
     name: 'WechatFeedback',
     component: () => import('../pages/WechatFeedback.vue')

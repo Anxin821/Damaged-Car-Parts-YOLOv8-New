@@ -35,12 +35,13 @@
             v-for="record in records" 
             :key="record.id" 
             class="record-item"
-            @click="viewRecord(record.id)"
+            @click="viewRecord(record)"
           >
             <div class="record-main">
-              <div class="record-id">{{ record.id }}</div>
+              <div class="record-id">{{ record.vehicleBrand }}</div>
               <div class="record-info">
                 <span class="record-location">{{ record.location }}</span>
+                <span class="record-damage-count" v-if="record.damageCount > 0">{{ record.damageCount }}处损伤</span>
                 <span class="record-time">{{ record.time }}</span>
               </div>
             </div>
@@ -85,25 +86,65 @@ const records = computed(() => {
     'damaged bumper': '保险杠', 'damaged wind shield': '挡风玻璃'
   }
   
+  // 计算总费用和最高严重程度
+  const totalAmount = regions.reduce((sum, region) => {
+    const severity = region.severity_level || 'MEDIUM'
+    return sum + calculateAmount(region.damage_type, severity)
+  }, 0)
+  
+  // 获取最高严重程度
+  const severityLevels = ['LOW', 'MINOR', 'MEDIUM', 'MODERATE', 'HIGH', 'SEVERE', 'CRITICAL']
+  const highestSeverity = regions.reduce((highest, region) => {
+    const current = region.severity_level || 'MEDIUM'
+    const currentIndex = severityLevels.indexOf(current)
+    const highestIndex = severityLevels.indexOf(highest)
+    return currentIndex > highestIndex ? current : highest
+  }, 'LOW')
+  
   const statusMap = {
     'LOW': '已完成', 'MINOR': '已完成',
     'MEDIUM': '待处理', 'MODERATE': '待处理',
     'HIGH': '待处理', 'SEVERE': '待处理', 'CRITICAL': '待处理'
   }
   
-  return regions.map((region, index) => {
-    const severity = region.severity_level || 'MEDIUM'
-    const status = statusMap[severity] || '待处理'
-    return {
-      id: `${result.taskId.slice(-8)}-${index + 1}`,
-      time: new Date().toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
-      location: partMap[region.part_code] || region.part_code || '未知部位',
-      amount: calculateAmount(region.damage_type, severity),
-      status,
-      statusClass: status === '已完成' ? 'status-completed' : 'status-pending'
-    }
-  })
+  const status = statusMap[highestSeverity] || '待处理'
+  
+  // 汇总所有损伤部位
+  const damageParts = regions.map(region => 
+    partMap[region.part_code] || region.part_code || '未知部位'
+  ).join('、')
+  
+  // 返回一个完整的定损报告记录
+  return [{
+    id: result.taskId.slice(-8),
+    time: new Date().toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    location: damageParts || '未检测到损伤',
+    amount: totalAmount,
+    damageCount: regions.length,
+    status,
+    statusClass: status === '已完成' ? 'status-completed' : 'status-pending',
+    taskId: result.taskId, // 保存完整的taskId用于跳转
+    vehicleBrand: getVehicleBrand(result) // 获取车辆品牌
+  }]
 })
+
+// 获取车辆品牌的辅助函数
+const getVehicleBrand = (result) => {
+  // 优先从豆包分析结果获取
+  const analysis = detectionStore.llmAnalysis?.analysis
+  if (analysis?.vehicle_info?.brand) {
+    return analysis.vehicle_info.brand
+  }
+  // 其次从YOLO检测结果获取
+  if (result?.brand) {
+    return result.brand
+  }
+  // 最后从detectionStore获取
+  if (detectionStore.carBrand) {
+    return detectionStore.carBrand
+  }
+  return '未知品牌'
+}
 
 const calculateAmount = (damageType, severity) => {
   const baseAmount = {
@@ -134,12 +175,8 @@ const getStatusTagType = (statusClass) => {
   return statusClass === 'status-completed' ? 'success' : 'warning'
 }
 
-const viewRecord = (id) => {
-  if (detectionStore.detectionResult?.taskId) {
-    router.push(`/damage-detail/${detectionStore.detectionResult.taskId}`)
-  } else {
-    router.push('/damage-detail')
-  }
+const viewRecord = (record) => {
+  router.push(`/damage-detail/${record.taskId}`)
 }
 </script>
 
@@ -246,9 +283,24 @@ const viewRecord = (id) => {
 
 .record-info {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
   font-size: 13px;
   color: #909399;
+}
+
+.record-location {
+  color: #606266;
+  font-weight: 500;
+}
+
+.record-damage-count {
+  background: #f56c6c;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .record-right {
