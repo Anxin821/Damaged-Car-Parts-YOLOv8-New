@@ -65,67 +65,62 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDetectionStore } from '../store/detection'
+import { historyApi } from '../api/history'
 import WechatNavBar from '../components/common/WechatNavBar.vue'
 
 const router = useRouter()
 const detectionStore = useDetectionStore()
 
-// 从 detectionStore 获取真实检测数据
+// 从数据库加载的历史记录
+const historyRecords = ref([])
+const loading = ref(false)
+
+// 页面加载时从数据库获取历史记录
+onMounted(async () => {
+  loading.value = true
+  console.log('[Dashboard] 开始加载历史记录...')
+  try {
+    const response = await historyApi.getHistory({ pageSize: 100 })
+    console.log('[Dashboard] API响应:', response)
+    console.log('[Dashboard] response.list:', response.list)
+    if (response.list) {
+      console.log('[Dashboard] 获取到记录数:', response.list.length)
+      // 强制触发Vue响应式更新
+      historyRecords.value = []
+      await nextTick()
+      historyRecords.value = response.list.map(item => ({
+        id: item.taskId?.slice(-8) || item.id,
+        time: new Date(item.createdAt || item.timestamp).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        location: item.location || '车辆损伤检测',
+        amount: item.amount || 0,
+        damageCount: item.damageCount || item.regions?.length || 0,
+        status: item.status === 'completed' ? '已完成' : '待处理',
+        statusClass: item.status === 'completed' ? 'status-completed' : 'status-pending',
+        taskId: item.taskId || item.id,
+        vehicleBrand: item.brand || item.vehicleBrand || '未知品牌'
+      }))
+      console.log('[Dashboard] 映射后的记录:', historyRecords.value)
+      // 再次强制刷新
+      await nextTick()
+    } else {
+      console.warn('[Dashboard] API返回数据格式不正确:', response)
+    }
+  } catch (error) {
+    console.error('[Dashboard] 获取历史记录失败:', error)
+  } finally {
+    loading.value = false
+    console.log('[Dashboard] 最终records:', records.value)
+  }
+})
+
+// 简化测试：直接返回历史记录
 const records = computed(() => {
-  const result = detectionStore.detectionResult
-  if (!result || !result.taskId) return []
-  
-  const regions = result.regions || []
-  
-  const partMap = {
-    'damaged door': '车门', 'damaged window': '车窗', 'damaged headlight': '前大灯',
-    'damaged mirror': '后视镜', 'dent': '凹陷', 'damaged hood': '引擎盖',
-    'damaged bumper': '保险杠', 'damaged wind shield': '挡风玻璃'
-  }
-  
-  // 计算总费用和最高严重程度
-  const totalAmount = regions.reduce((sum, region) => {
-    const severity = region.severity_level || 'MEDIUM'
-    return sum + calculateAmount(region.damage_type, severity)
-  }, 0)
-  
-  // 获取最高严重程度
-  const severityLevels = ['LOW', 'MINOR', 'MEDIUM', 'MODERATE', 'HIGH', 'SEVERE', 'CRITICAL']
-  const highestSeverity = regions.reduce((highest, region) => {
-    const current = region.severity_level || 'MEDIUM'
-    const currentIndex = severityLevels.indexOf(current)
-    const highestIndex = severityLevels.indexOf(highest)
-    return currentIndex > highestIndex ? current : highest
-  }, 'LOW')
-  
-  const statusMap = {
-    'LOW': '已完成', 'MINOR': '已完成',
-    'MEDIUM': '待处理', 'MODERATE': '待处理',
-    'HIGH': '待处理', 'SEVERE': '待处理', 'CRITICAL': '待处理'
-  }
-  
-  const status = statusMap[highestSeverity] || '待处理'
-  
-  // 汇总所有损伤部位
-  const damageParts = regions.map(region => 
-    partMap[region.part_code] || region.part_code || '未知部位'
-  ).join('、')
-  
-  // 返回一个完整的定损报告记录
-  return [{
-    id: result.taskId.slice(-8),
-    time: new Date().toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
-    location: damageParts || '未检测到损伤',
-    amount: totalAmount,
-    damageCount: regions.length,
-    status,
-    statusClass: status === '已完成' ? 'status-completed' : 'status-pending',
-    taskId: result.taskId, // 保存完整的taskId用于跳转
-    vehicleBrand: getVehicleBrand(result) // 获取车辆品牌
-  }]
+  console.log('[Dashboard] records计算属性执行, historyRecords长度:', historyRecords.value.length)
+  console.log('[Dashboard] historyRecords内容:', historyRecords.value)
+  return historyRecords.value
 })
 
 // 获取车辆品牌的辅助函数

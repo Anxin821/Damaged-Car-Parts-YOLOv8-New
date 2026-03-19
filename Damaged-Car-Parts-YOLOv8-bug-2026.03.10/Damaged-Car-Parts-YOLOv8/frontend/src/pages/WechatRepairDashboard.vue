@@ -38,7 +38,7 @@
             @click="viewRecord(record)"
           >
             <div class="record-main">
-              <div class="record-id">{{ record.vehicleBrand }}</div>
+              <div class="record-id">{{ record.id }}</div>
               <div class="record-info">
                 <span class="record-location">{{ record.damageSummary }}</span>
                 <span class="record-priority" :class="`priority-${record.highestPriority}`">

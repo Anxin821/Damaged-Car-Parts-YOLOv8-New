@@ -1,8 +1,9 @@
 import io
 import uuid
 import os
+import mysql.connector
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 import uvicorn
 import numpy as np
 from enum import Enum
@@ -24,6 +25,124 @@ from dotenv import load_dotenv
 # 加载 .env 和 .env.local 文件
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env.local'))
+
+# 数据库连接配置
+DB_CONFIG = {
+    'host': os.getenv('DB_HOST', 'localhost'),
+    'port': int(os.getenv('DB_PORT', '3306')),
+    'user': os.getenv('DB_USER', 'root'),
+    'password': os.getenv('DB_PASSWORD', '123456'),
+    'database': os.getenv('DB_NAME', 'damage_assessment_db'),
+    'charset': os.getenv('DB_CHARSET', 'utf8mb4')
+}
+
+def get_db_connection():
+    """获取数据库连接"""
+    try:
+        connection = mysql.connector.connect(**DB_CONFIG)
+        return connection
+    except Exception as e:
+        print(f"数据库连接失败: {e}")
+        return None
+
+def create_feedback_table_if_not_exists():
+    """创建反馈表（如果不存在）"""
+    connection = get_db_connection()
+    if not connection:
+        return False
+    
+    try:
+        cursor = connection.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_feedback (
+                id INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+                feedback_id VARCHAR(36) UNIQUE NOT NULL COMMENT '反馈唯一标识符',
+                contact_info VARCHAR(100) COMMENT '联系方式（手机/微信/邮箱）',
+                feedback_type VARCHAR(50) NOT NULL COMMENT '反馈类型（产品建议/功能异常/体验交互等）',
+                feedback_content TEXT NOT NULL COMMENT '反馈内容详情',
+                assessment_task_id VARCHAR(36) COMMENT '关联的定损任务ID（可选）',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                
+                INDEX idx_feedback_id (feedback_id),
+                INDEX idx_assessment_task_id (assessment_task_id),
+                INDEX idx_feedback_type (feedback_type),
+                INDEX idx_created_at (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci 
+            COMMENT='用户意见与反馈表 - 存储用户提交的反馈信息'
+        """)
+        
+        # 创建检测相关的表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS assessment_tasks (
+                id INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+                task_id VARCHAR(36) UNIQUE NOT NULL COMMENT '检测任务唯一标识符',
+                status VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT '任务状态（pending/processing/completed/failed）',
+                progress INT DEFAULT 0 COMMENT '任务进度百分比（0-100）',
+                damage_types JSON COMMENT '检测到的损伤类型数组（JSON格式）',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                
+                INDEX idx_task_id (task_id),
+                INDEX idx_status (status),
+                INDEX idx_created_at (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci 
+            COMMENT='车辆损伤检测任务表 - 存储YOLO检测任务的主要信息'
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS task_images (
+                id INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+                task_id VARCHAR(36) NOT NULL COMMENT '关联的检测任务ID',
+                image_id VARCHAR(50) NOT NULL COMMENT '图像唯一标识符（如img_0, img_1）',
+                image_url TEXT NOT NULL COMMENT '图像的Base64编码URL',
+                thumb_url TEXT COMMENT '缩略图URL（预留字段）',
+                original_path TEXT COMMENT '原始图片本地存储路径',
+                annotated_path TEXT COMMENT '标注图片本地存储路径',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                
+                INDEX idx_task_id (task_id),
+                INDEX idx_image_id (image_id),
+                FOREIGN KEY (task_id) REFERENCES assessment_tasks(task_id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci 
+            COMMENT='检测任务图像表 - 存储每个检测任务上传的图像信息'
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS damage_regions (
+                id INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+                task_id VARCHAR(36) NOT NULL COMMENT '关联的检测任务ID',
+                region_id VARCHAR(50) NOT NULL COMMENT '损伤区域唯一标识符（如img_0_r0, img_0_r1）',
+                image_id VARCHAR(50) NOT NULL COMMENT '关联的图像ID',
+                bbox VARCHAR(50) COMMENT '边界框坐标（x1,y1,x2,y2格式）',
+                damage_type VARCHAR(50) COMMENT '标准化的损伤类型（GLASS_DAMAGE/PAINT_DAMAGE等）',
+                damage_type_label VARCHAR(100) COMMENT '原始损伤标签（如damaged headlight）',
+                severity_level VARCHAR(20) COMMENT '严重程度等级（LOW/MEDIUM/HIGH）',
+                part_code VARCHAR(100) COMMENT '零部件代码或名称',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                
+                INDEX idx_task_id (task_id),
+                INDEX idx_region_id (region_id),
+                INDEX idx_image_id (image_id),
+                INDEX idx_damage_type (damage_type),
+                FOREIGN KEY (task_id) REFERENCES assessment_tasks(task_id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci 
+            COMMENT='损伤区域详情表 - 存储YOLO检测到的每个损伤区域的详细信息'
+        """)
+        
+        connection.commit()
+        print("✅ 数据库表检查/创建完成")
+        return True
+    except Exception as e:
+        print(f"❌ 创建数据库表失败: {e}")
+        return False
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+# 初始化时创建反馈表
+create_feedback_table_if_not_exists()
   
   
 
@@ -166,11 +285,39 @@ def _run_detection_task(task_id: str, files_bytes: List[bytes]):
     regions_payload = []
     all_damage_types = set()
 
+    # 创建任务目录结构
+    import os
+    # 获取项目根目录的assets文件夹
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(current_dir))
+    base_assets_dir = os.path.join(project_root, "assets")
+    
+    task_dir = os.path.join(base_assets_dir, task_id)
+    original_dir = os.path.join(task_dir, "original")
+    annotated_dir = os.path.join(task_dir, "annotated")
+    
+    print(f"[Detection] Current dir: {current_dir}")
+    print(f"[Detection] Project root: {project_root}")
+    print(f"[Detection] Assets dir: {base_assets_dir}")
+    
+    # 确保目录存在
+    os.makedirs(original_dir, exist_ok=True)
+    os.makedirs(annotated_dir, exist_ok=True)
+    
+    print(f"[Detection] Created directories for task {task_id}: {task_dir}")
+
     total = max(1, len(files_bytes))
     for idx, file_bytes in enumerate(files_bytes):
       _tasks[task_id]["progress"] = int(5 + (idx / total) * 80)
 
       image_id = f"img_{idx}"
+      
+      # 保存原始图片
+      original_filename = f"{image_id}_original.jpg"
+      original_filepath = os.path.join(original_dir, original_filename)
+      with open(original_filepath, "wb") as f:
+        f.write(file_bytes)
+      print(f"[Detection] Saved original image: {original_filepath}")
 
       pil = Image.open(io.BytesIO(file_bytes)).convert("RGB")
       arr = np.array(pil)
@@ -179,37 +326,60 @@ def _run_detection_task(task_id: str, files_bytes: List[bytes]):
       det = detection(bgr)
       classes = det.get("classes") or []
       boxes = det.get("boxes") or []
+      confidences = det.get("confidences") or []
 
-      for c in classes:
-       all_damage_types.add(_map_damage_type(c))
+      # 在图片上绘制标注
+      annotated_bgr = bgr.copy()
+      for box, cls, conf in zip(boxes, classes, confidences):
+        x1, y1, x2, y2 = map(int, box)
+        damage_type = _map_damage_type(cls)
+        all_damage_types.add(damage_type)
+        
+        # 绘制边界框
+        color = (0, 255, 0) if damage_type == "PAINT_DAMAGE" else (0, 0, 255)
+        cv2.rectangle(annotated_bgr, (x1, y1), (x2, y2), color, 2)
+        
+        # 添加标签
+        label = f"{cls} {conf:.2f}"
+        label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
+        cv2.rectangle(annotated_bgr, (x1, y1 - label_size[1] - 10), 
+                     (x1 + label_size[0], y1), color, -1)
+        cv2.putText(annotated_bgr, label, (x1, y1 - 5), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+        
+        # 保存损伤区域信息
+        region_id = f"{image_id}_r{len(regions_payload)}"
+        bbox_str = f"{x1},{y1},{x2},{y2}"
+        
+        regions_payload.append({
+          "id": region_id,
+          "image_id": image_id,
+          "bbox": bbox_str,
+          "damage_type": damage_type,
+          "damage_type_label": cls,
+          "severity_level": "MEDIUM",  # 默认中等严重程度
+          "part_code": cls,
+        })
 
-      for b_i, box in enumerate(boxes):
-       try:
-         x, y, w, h = box
-         x2 = x + w
-         y2 = y + h
-         bbox = f"{x},{y},{x2},{y2}"
-       except Exception:
-         bbox = ""
+      # 保存标注后的图片
+      annotated_filename = f"{image_id}_annotated.jpg"
+      annotated_filepath = os.path.join(annotated_dir, annotated_filename)
+      annotated_rgb = annotated_bgr[:, :, ::-1]  # 转换回RGB
+      annotated_pil = Image.fromarray(annotated_rgb)
+      annotated_pil.save(annotated_filepath, "JPEG", quality=95)
+      print(f"[Detection] Saved annotated image: {annotated_filepath}")
 
-       raw_label = classes[b_i] if b_i < len(classes) else "unknown"
-       damage_type = _map_damage_type(raw_label)
-
-       regions_payload.append({
-         "id": f"{image_id}_r{b_i}",
-         "image_id": image_id,
-         "bbox": bbox,
-         "damage_type": damage_type,
-         "damage_type_label": raw_label,
-         "severity_level": "MEDIUM",
-         "part_code": raw_label,
-       })
-
-      img_b64 = base64.b64encode(file_bytes).decode("utf-8")
+      # 将原始图片转换为base64用于前端显示
+      img_buffer = io.BytesIO()
+      pil.save(img_buffer, format='JPEG', quality=85)
+      img_b64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+      
       images_payload.append({
         "id": image_id,
         "image_url": f"data:image/jpeg;base64,{img_b64}",
         "thumb_url": None,
+        "original_path": original_filepath,
+        "annotated_path": annotated_filepath,
       })
 
     _tasks[task_id]["result"] = {
@@ -220,6 +390,82 @@ def _run_detection_task(task_id: str, files_bytes: List[bytes]):
     }
     _tasks[task_id]["status"] = "completed"
     _tasks[task_id]["progress"] = 100
+    
+    # 保存检测结果到数据库
+    try:
+      connection = get_db_connection()
+      if connection:
+        cursor = connection.cursor()
+        
+        # 插入主检测记录
+        cursor.execute("""
+          INSERT INTO assessment_tasks 
+          (task_id, status, progress, damage_types, created_at, updated_at)
+          VALUES (%s, %s, %s, %s, NOW(), NOW())
+          ON DUPLICATE KEY UPDATE
+          status = VALUES(status),
+          progress = VALUES(progress),
+          damage_types = VALUES(damage_types),
+          updated_at = VALUES(updated_at)
+        """, (
+          task_id,
+          "completed",
+          100,
+          json.dumps(sorted(list(all_damage_types)))
+        ))
+        
+        # 插入图像记录（包含本地路径）
+        for img in images_payload:
+          cursor.execute("""
+            INSERT INTO task_images 
+            (task_id, image_id, image_url, thumb_url, original_path, annotated_path, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            ON DUPLICATE KEY UPDATE
+            image_url = VALUES(image_url),
+            thumb_url = VALUES(thumb_url),
+            original_path = VALUES(original_path),
+            annotated_path = VALUES(annotated_path)
+          """, (
+            task_id,
+            img["id"],
+            img["image_url"],
+            img["thumb_url"],
+            img["original_path"],
+            img["annotated_path"]
+          ))
+        
+        # 插入损伤区域记录
+        for region in regions_payload:
+          cursor.execute("""
+            INSERT INTO damage_regions 
+            (task_id, region_id, image_id, bbox, damage_type, 
+             damage_type_label, severity_level, part_code, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            ON DUPLICATE KEY UPDATE
+            bbox = VALUES(bbox),
+            damage_type = VALUES(damage_type),
+            damage_type_label = VALUES(damage_type_label),
+            severity_level = VALUES(severity_level),
+            part_code = VALUES(part_code)
+          """, (
+            task_id,
+            region["id"],
+            region["image_id"],
+            region["bbox"],
+            region["damage_type"],
+            region["damage_type_label"],
+            region["severity_level"],
+            region["part_code"]
+          ))
+        
+        connection.commit()
+        cursor.close()
+        connection.close()
+        print(f"[Detection] Task {task_id} results saved to database and local files")
+        
+    except Exception as db_error:
+      print(f"[Detection Error] Failed to save to database: {db_error}")
+      # 不影响主流程，继续返回结果
   except Exception as e:
     _tasks[task_id]["status"] = "failed"
     _tasks[task_id]["error"] = str(e)
@@ -258,9 +504,94 @@ async def post_detection_api(
 
 @app.get('/api/detection/result/{task_id}')
 def get_detection_result(task_id: str):
+  # 首先从内存中查找
   task = _tasks.get(task_id)
+  
   if not task:
+    # 如果内存中没有，尝试从数据库中查找
+    try:
+      connection = get_db_connection()
+      if connection:
+        cursor = connection.cursor(dictionary=True)
+        
+        # 查询主任务记录
+        cursor.execute("""
+          SELECT * FROM assessment_tasks 
+          WHERE task_id = %s
+        """, (task_id,))
+        
+        db_task = cursor.fetchone()
+        if db_task:
+          # 查询图像记录
+          cursor.execute("""
+            SELECT * FROM task_images 
+            WHERE task_id = %s
+          """, (task_id,))
+          images = cursor.fetchall()
+          
+          # 查询损伤区域记录
+          cursor.execute("""
+            SELECT * FROM damage_regions 
+            WHERE task_id = %s
+          """, (task_id,))
+          regions = cursor.fetchall()
+          
+          # 构建响应数据
+          images_payload = []
+          for img in images:
+            images_payload.append({
+              "id": img["image_id"],
+              "image_url": img["image_url"],
+              "thumb_url": img["thumb_url"],
+            })
+          
+          regions_payload = []
+          for region in regions:
+            regions_payload.append({
+              "id": region["region_id"],
+              "image_id": region["image_id"],
+              "bbox": region["bbox"],
+              "damage_type": region["damage_type"],
+              "damage_type_label": region["damage_type_label"],
+              "severity_level": region["severity_level"],
+              "part_code": region["part_code"],
+            })
+          
+          # 解析损伤类型JSON
+          damage_types = []
+          if db_task["damage_types"]:
+            try:
+              damage_types = json.loads(db_task["damage_types"])
+            except:
+              damage_types = []
+          
+          result_data = {
+            "taskId": task_id,
+            "damage_types": damage_types,
+            "images": images_payload,
+            "regions": regions_payload,
+          }
+          
+          cursor.close()
+          connection.close()
+          
+          print(f"[Database] Retrieved task {task_id} from database")
+          return {
+            "status": db_task["status"],
+            "progress": db_task["progress"],
+            **result_data,
+          }
+        
+        cursor.close()
+        connection.close()
+        
+    except Exception as e:
+      print(f"[Database Error] Failed to retrieve task {task_id}: {e}")
+    
+    # 如果内存和数据库都没有找到，返回404
     raise HTTPException(status_code=404, detail='Task not found')
+  
+  # 如果内存中找到，按原逻辑处理
   if task["status"] == "completed":
     payload = task.get("result") or {}
     return {
@@ -282,13 +613,58 @@ def get_detection_result(task_id: str):
 
 @app.get('/api/detection/history')
 def get_detection_history(page: int = 1, pageSize: int = 10, startDate: str = None, endDate: str = None, damageType: str = None, severity: str = None):
-  all_items = list(_tasks.values())
-  all_items.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+  # 从数据库读取历史记录
+  all_items = []
+  try:
+    connection = get_db_connection()
+    if connection:
+      cursor = connection.cursor(dictionary=True)
+      # 查询所有已完成的任务，按创建时间倒序
+      cursor.execute("""
+        SELECT 
+          at.task_id as taskId,
+          at.status,
+          at.created_at as createdAt,
+          da.vehicle_brand as brand,
+          da.total_cost as amount,
+          (SELECT COUNT(*) FROM damage_regions dr WHERE dr.task_id = at.task_id) as damageCount,
+          '车辆损伤检测' as location
+        FROM assessment_tasks at
+        LEFT JOIN damage_assessments da ON at.task_id = da.task_id
+        WHERE at.status = 'completed'
+        ORDER BY at.created_at DESC
+      """)
+      
+      db_items = cursor.fetchall()
+      for item in db_items:
+        all_items.append({
+          "taskId": item["taskId"],
+          "status": item["status"],
+          "createdAt": item["createdAt"].isoformat() if item["createdAt"] else None,
+          "brand": item["brand"] or "未知品牌",
+          "amount": float(item["amount"]) if item["amount"] else 0,
+          "damageCount": item["damageCount"] or 0,
+          "location": item["location"]
+        })
+      
+      cursor.close()
+      connection.close()
+      print(f"[History] Loaded {len(all_items)} records from database")
+  except Exception as e:
+    print(f"[History Error] Failed to load from database: {e}")
+  
+  # 如果数据库为空，回退到内存数据
+  if not all_items:
+    all_items = list(_tasks.values())
+    all_items.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+  
   total = len(all_items)
   start = (page - 1) * pageSize
   end = start + pageSize
   items = all_items[start:end]
-  return {"items": items, "page": page, "pageSize": pageSize, "total": total}
+  
+  # 返回前端期望的数据格式
+  return {"list": items, "page": page, "pageSize": pageSize, "total": total}
 
 
 @app.get('/api/detection/{task_id}')
@@ -485,8 +861,86 @@ async def analyze_with_llm(task_id: str):
     """
     使用豆包大模型分析车辆损伤图片
     """
-    # 1. 校验任务状态
+    # 1. 校验任务状态 - 先从内存查找，再从数据库查找
     task = _tasks.get(task_id)
+    
+    if not task:
+        # 如果内存中没有，尝试从数据库中查找
+        try:
+            connection = get_db_connection()
+            if connection:
+                cursor = connection.cursor(dictionary=True)
+                
+                # 查询主任务记录
+                cursor.execute("""
+                    SELECT * FROM assessment_tasks 
+                    WHERE task_id = %s AND status = 'completed'
+                """, (task_id,))
+                
+                db_task = cursor.fetchone()
+                if db_task:
+                    # 查询图像记录
+                    cursor.execute("""
+                        SELECT * FROM task_images 
+                        WHERE task_id = %s
+                    """, (task_id,))
+                    images = cursor.fetchall()
+                    
+                    # 查询损伤区域记录
+                    cursor.execute("""
+                        SELECT * FROM damage_regions 
+                        WHERE task_id = %s
+                    """, (task_id,))
+                    regions = cursor.fetchall()
+                    
+                    # 构建任务数据结构
+                    images_payload = []
+                    for img in images:
+                        images_payload.append({
+                            "id": img["image_id"],
+                            "image_url": img["image_url"],
+                            "thumb_url": img["thumb_url"],
+                        })
+                    
+                    regions_payload = []
+                    for region in regions:
+                        regions_payload.append({
+                            "id": region["region_id"],
+                            "image_id": region["image_id"],
+                            "bbox": region["bbox"],
+                            "damage_type": region["damage_type"],
+                            "damage_type_label": region["damage_type_label"],
+                            "severity_level": region["severity_level"],
+                            "part_code": region["part_code"],
+                        })
+                    
+                    # 解析损伤类型JSON
+                    damage_types = []
+                    if db_task["damage_types"]:
+                        try:
+                            damage_types = json.loads(db_task["damage_types"])
+                        except:
+                            damage_types = []
+                    
+                    task = {
+                        "status": db_task["status"],
+                        "progress": db_task["progress"],
+                        "result": {
+                            "taskId": task_id,
+                            "damage_types": damage_types,
+                            "images": images_payload,
+                            "regions": regions_payload,
+                        }
+                    }
+                    
+                    print(f"[Database] Retrieved task {task_id} from database for LLM analysis")
+                
+                cursor.close()
+                connection.close()
+                
+        except Exception as e:
+            print(f"[Database Error] Failed to retrieve task {task_id} for LLM analysis: {e}")
+    
     if not task:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
     
@@ -511,73 +965,71 @@ async def analyze_with_llm(task_id: str):
     for r in regions:
         part = r.get("part_code", "未知部位")
         damage = r.get("damage_type_label", "未知损伤")
-        damage_summary.append(f"{part}: {damage}")
+        damage_summary.append(part + ": " + damage)
     
     damage_text = "; ".join(damage_summary) if damage_summary else "未检测到明显损伤"
     
-    # 4. 构建提示词
-    prompt = f"""你是一位专业的车辆定损评估专家，请分析这张车辆损伤图片，严格按照以下JSON格式输出评估报告，不要添加任何多余文字：
-
-{{
-    "vehicle_info": {{
+    # 4. 构建提示词 - 使用简化版本避免JSON格式问题
+    prompt = """请分析这张车辆损伤图片，返回JSON格式：
+{
+    "vehicle_info": {
         "brand": "车辆品牌",
-        "model": "具体车型"
-    }},
-    "damage_level": {{
+        "model": "车型"
+    },
+    "damage_level": {
         "部位1": "轻微/中等/严重",
         "部位2": "轻微/中等/严重"
-    }},
+    },
     "repair_suggestion": "具体维修方案",
     "cost_estimate": "费用区间",
     "safety_tips": "行车安全提示",
-    "pre_repair_analysis": {{
+    "pre_repair_analysis": {
         "high_priority": [
-            {{
+            {
                 "part": "损伤部位名称",
                 "damage_type": "损伤类型",
                 "severity": "损伤程度",
-                "impact_analysis": "影响分析描述",
                 "repair_suggestion": "具体维修建议"
-            }}
+            }
         ],
         "medium_priority": [
-            {{
-                "part": "损伤部位名称",
+            {
+                "part": "损伤部位名称", 
                 "damage_type": "损伤类型",
                 "severity": "损伤程度",
-                "impact_analysis": "影响分析描述",
                 "repair_suggestion": "具体维修建议"
-            }}
+            }
         ],
         "low_priority": [
-            {{
+            {
                 "part": "损伤部位名称",
-                "damage_type": "损伤类型",
+                "damage_type": "损伤类型", 
                 "severity": "损伤程度",
-                "impact_analysis": "影响分析描述",
                 "repair_suggestion": "具体维修建议"
-            }}
+            }
         ]
-    }}
-}}
+    },
+    "detailed_cost_breakdown": {
+        "brand_confidence": 85.5,
+        "total_parts_cost": 8500.00,
+        "total_labor_cost": 3500.00,
+        "total_cost": 12000.00,
+        "total_repair_time": 8,
+        "cost_breakdown": [
+            {
+                "part_name": "维修部件名称",
+                "parts_cost": 配件成本(元),
+                "labor_cost": 工时成本(元),
+                "labor_hours": 工时数(小时),
+                "total_cost": 该部件总成本(元)
+            }
+        ]
+    }
+}
 
-分析依据：
-检测到的损伤信息：{damage_text}
+检测到的损伤信息：""" + damage_text + """
 
-分析要求：
-1. 车辆识别：仔细观察车辆外观特征，准确识别品牌和车型，必须填写vehicle_info字段
-2. 损伤程度评估：对每个部位给出明确的严重程度
-3. 维修建议：具体到维修工艺（如钣金、喷漆、更换配件等）
-4. 费用估算：基于市场行情给出合理区间
-5. 安全提示：指出影响行车安全的关键损伤
-6. 预修车分析：按破损影响程度排序维修优先级
-   - 高优先级：涉及行车安全的紧急维修项目（如大灯、刹车系统等）
-   - 中优先级：影响使用但不危及安全的维修项目（如保险杠、车门等）
-   - 低优先级：仅外观影响的维修项目（如轻微划痕等）
-   - 每个优先级项目必须包含：部位、损伤类型、程度、影响分析、维修建议
-
-重要：必须严格按照上述JSON格式输出，不要添加任何其他字段。
-"""
+重要：必须严格按照上述JSON格式输出，所有数值字段必须提供具体的数字。"""
     
     try:
         # 5. 从环境变量获取配置
@@ -622,10 +1074,10 @@ async def analyze_with_llm(task_id: str):
         # 打印请求日志（显示完整 Authorization 用于调试）
         print(f"[LLM Request] URL: {endpoint}")
         print(f"[LLM Request] Headers: {json.dumps(request_headers, indent=2)}")
-        print(f"[LLM Request] Body: {json.dumps(request_body, ensure_ascii=False, indent=2)}")
+        print(f"[LLM Request] Body: {json.dumps(request_body, indent=2)}")
         
         # 7. 发送HTTP请求
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.post(
                 endpoint,
                 headers=request_headers,
@@ -658,6 +1110,110 @@ async def analyze_with_llm(task_id: str):
                 "error": "Model returned non-JSON format"
             }
         
+        # 保存分析结果到数据库
+        try:
+            connection = get_db_connection()
+            if connection:
+                cursor = connection.cursor()
+                
+                # 提取车辆信息
+                vehicle_info = analysis_result.get("vehicle_info", {})
+                vehicle_brand = vehicle_info.get("brand", "")
+                vehicle_model = vehicle_info.get("model", "")
+                
+                # 提取损伤等级信息
+                damage_level = analysis_result.get("damage_level", {})
+                
+                # 提取维修建议和费用估算
+                repair_suggestion = analysis_result.get("repair_suggestion", "")
+                cost_estimate = analysis_result.get("cost_estimate", "")
+                safety_tips = analysis_result.get("safety_tips", "")
+                
+                # 预修车分析
+                pre_repair_analysis = analysis_result.get("pre_repair_analysis", {})
+                
+                # 提取详细成本分解
+                detailed_cost = analysis_result.get("detailed_cost_breakdown", {})
+                brand_confidence = detailed_cost.get("brand_confidence", 0.0)
+                total_parts_cost = detailed_cost.get("total_parts_cost", 0.0)
+                total_labor_cost = detailed_cost.get("total_labor_cost", 0.0)
+                total_cost = detailed_cost.get("total_cost", 0.0)
+                total_repair_time = detailed_cost.get("total_repair_time", 0)
+                cost_breakdown = detailed_cost.get("cost_breakdown", [])
+                
+                # 更新或插入定损记录
+                cursor.execute("""
+                    INSERT INTO damage_assessments 
+                    (task_id, status, vehicle_brand, vehicle_model, 
+                     assessment_conclusion, ai_analysis, priority_analysis,
+                     brand_confidence, total_parts_cost, total_labor_cost, 
+                     total_cost, total_repair_time, completed_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    ON DUPLICATE KEY UPDATE
+                    vehicle_brand = VALUES(vehicle_brand),
+                    vehicle_model = VALUES(vehicle_model),
+                    assessment_conclusion = VALUES(assessment_conclusion),
+                    ai_analysis = VALUES(ai_analysis),
+                    priority_analysis = VALUES(priority_analysis),
+                    brand_confidence = VALUES(brand_confidence),
+                    total_parts_cost = VALUES(total_parts_cost),
+                    total_labor_cost = VALUES(total_labor_cost),
+                    total_cost = VALUES(total_cost),
+                    total_repair_time = VALUES(total_repair_time),
+                    completed_at = VALUES(completed_at),
+                    status = VALUES(status)
+                """, (
+                    task_id, 
+                    'completed',
+                    vehicle_brand, 
+                    vehicle_model,
+                    f"维修建议: {repair_suggestion}\n费用估算: {cost_estimate}\n安全提示: {safety_tips}",
+                    json.dumps(analysis_result, ensure_ascii=False),
+                    json.dumps(pre_repair_analysis, ensure_ascii=False),
+                    brand_confidence,
+                    total_parts_cost,
+                    total_labor_cost,
+                    total_cost,
+                    total_repair_time
+                ))
+                
+                # 如果有损伤区域信息，也保存到damage_regions表
+                if damage_level:
+                    for part, severity in damage_level.items():
+                        # 映射严重程度
+                        severity_mapping = {
+                            "轻微": "LOW",
+                            "中等": "MEDIUM", 
+                            "严重": "HIGH",
+                            "非常严重": "SEVERE",
+                            "危急": "CRITICAL"
+                        }
+                        db_severity = severity_mapping.get(severity, "MEDIUM")
+                        
+                        cursor.execute("""
+                            INSERT INTO damage_regions 
+                            (task_id, region_id, image_id, damage_type, damage_type_label, 
+                             severity_level, part_code, created_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                        """, (
+                            task_id,  # 使用task_id而不是assessment_id
+                            f"llm_{len(damage_level)}",  # 生成region_id
+                            "main_image",  # 默认图像ID
+                            "STRUCTURAL_DAMAGE",  # 损伤类型
+                            part,  # 损伤标签
+                            db_severity,  # 严重程度
+                            part  # 部件代码
+                        ))
+                
+                connection.commit()
+                cursor.close()
+                connection.close()
+                print(f"[Database] LLM analysis for task {task_id} saved to database")
+                
+        except Exception as db_error:
+            print(f"[Database Error] Failed to save LLM analysis: {db_error}")
+            # 不影响API返回，继续执行
+        
         return {
             "task_id": task_id,
             "analysis": analysis_result,
@@ -669,6 +1225,197 @@ async def analyze_with_llm(task_id: str):
         raise HTTPException(status_code=500, detail=f"LLM API request failed: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM analysis failed: {str(e)}")
+
+# ========================================
+# 意见与反馈API接口
+# ========================================
+
+# 反馈数据模型
+class FeedbackRequest(BaseModel):
+    contact: Optional[str] = None  # 前端发送的字段名
+    category: str  # 前端发送的字段名
+    content: str  # 前端发送的字段名
+    assessment_task_id: Optional[str] = None
+
+class FeedbackResponse(BaseModel):
+    success: bool
+    message: str
+    feedback_id: Optional[str] = None
+
+# 内存存储反馈数据（作为备用，主要使用数据库）
+feedback_storage = {}
+
+@app.post("/api/feedback", response_model=FeedbackResponse)
+async def submit_feedback(feedback: FeedbackRequest):
+    """提交意见与反馈"""
+    connection = get_db_connection()
+    if not connection:
+        raise HTTPException(status_code=500, detail="数据库连接失败")
+    
+    try:
+        # 生成唯一的反馈ID
+        feedback_id = f"FB{datetime.now().strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:6]}"
+        
+        # 保存到数据库
+        cursor = connection.cursor()
+        cursor.execute("""
+            INSERT INTO user_feedback 
+            (feedback_id, contact_info, feedback_type, feedback_content, assessment_task_id)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (feedback_id, feedback.contact, feedback.category, feedback.content, feedback.assessment_task_id))
+        
+        connection.commit()
+        
+        # 同时保存到内存（用于GET接口，作为缓存）
+        feedback_data = {
+            "feedback_id": feedback_id,
+            "contact_info": feedback.contact,
+            "feedback_type": feedback.category,
+            "feedback_content": feedback.content,
+            "assessment_task_id": feedback.assessment_task_id,
+            "created_at": datetime.now().isoformat()
+        }
+        feedback_storage[feedback_id] = feedback_data
+        
+        print(f"[Feedback] New feedback saved to database: {feedback_id}")
+        print(f"[Feedback] Type: {feedback.category}")
+        print(f"[Feedback] Contact: {feedback.contact}")
+        
+        return FeedbackResponse(
+            success=True,
+            message="反馈提交成功，感谢您的意见！",
+            feedback_id=feedback_id
+        )
+        
+    except Exception as e:
+        print(f"[Feedback Error] {str(e)}")
+        connection.rollback()
+        raise HTTPException(status_code=500, detail=f"提交反馈失败: {str(e)}")
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@app.get("/api/feedback", response_model=dict)
+async def get_feedback(feedback_type: Optional[str] = None, limit: int = 20):
+    """获取反馈列表"""
+    connection = get_db_connection()
+    if not connection:
+        raise HTTPException(status_code=500, detail="数据库连接失败")
+    
+    try:
+        cursor = connection.cursor(dictionary=True)
+        
+        if feedback_type:
+            cursor.execute("""
+                SELECT * FROM user_feedback 
+                WHERE feedback_type = %s 
+                ORDER BY created_at DESC 
+                LIMIT %s
+            """, (feedback_type, limit))
+        else:
+            cursor.execute("""
+                SELECT * FROM user_feedback 
+                ORDER BY created_at DESC 
+                LIMIT %s
+            """, (limit,))
+        
+        feedbacks = cursor.fetchall()
+        
+        return {
+            "success": True,
+            "data": feedbacks,
+            "total": len(feedbacks)
+        }
+        
+    except Exception as e:
+        print(f"[Feedback Error] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取反馈列表失败: {str(e)}")
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@app.get("/api/feedback/{feedback_id}", response_model=dict)
+async def get_feedback_by_id(feedback_id: str):
+    """根据ID获取反馈详情"""
+    connection = get_db_connection()
+    if not connection:
+        raise HTTPException(status_code=500, detail="数据库连接失败")
+    
+    try:
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT * FROM user_feedback WHERE feedback_id = %s
+        """, (feedback_id,))
+        
+        feedback = cursor.fetchone()
+        
+        if not feedback:
+            raise HTTPException(status_code=404, detail="反馈不存在")
+        
+        return {
+            "success": True,
+            "data": feedback
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Feedback Error] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取反馈详情失败: {str(e)}")
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@app.get("/api/feedback/statistics", response_model=dict)
+async def get_feedback_statistics():
+    """获取反馈统计信息"""
+    connection = get_db_connection()
+    if not connection:
+        raise HTTPException(status_code=500, detail="数据库连接失败")
+    
+    try:
+        cursor = connection.cursor(dictionary=True)
+        
+        # 按类型统计
+        cursor.execute("""
+            SELECT feedback_type, COUNT(*) as count
+            FROM user_feedback
+            GROUP BY feedback_type
+        """)
+        type_stats = cursor.fetchall()
+        
+        # 总体统计
+        cursor.execute("""
+            SELECT 
+                COUNT(*) as total_feedback,
+                COUNT(CASE WHEN created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 END) as this_week_count
+            FROM user_feedback
+        """)
+        total_stats = cursor.fetchone()
+        
+        return {
+            "success": True,
+            "data": {
+                "total_feedback": total_stats["total_feedback"],
+                "this_week_count": total_stats["this_week_count"],
+                "type_statistics": {item["feedback_type"]: item["count"] for item in type_stats}
+            }
+        }
+        
+    except Exception as e:
+        print(f"[Feedback Error] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取统计信息失败: {str(e)}")
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 # 注册 router 到 app
 app.include_router(router)

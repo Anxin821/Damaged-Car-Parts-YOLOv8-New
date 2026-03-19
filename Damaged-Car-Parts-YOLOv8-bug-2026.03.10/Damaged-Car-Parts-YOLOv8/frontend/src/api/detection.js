@@ -116,7 +116,7 @@ export const detectionApi = {
   // LLM大模型分析
   analyzeWithLLM: (taskId) => api.post('/llm/analyze', null, {
     params: { task_id: taskId },
-    timeout: 60000
+    timeout: 180000  // 180秒，与后端超时匹配
   })
 }
 

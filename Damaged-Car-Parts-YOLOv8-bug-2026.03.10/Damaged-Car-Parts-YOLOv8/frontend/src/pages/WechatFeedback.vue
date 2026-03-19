@@ -42,6 +42,7 @@
           :disabled="submitting || content.trim().length === 0" 
           @click="submit"
           class="submit"
+          size="large"
         >
           {{ submitting ? '提交中...' : '提交反馈' }}
         </el-button>
@@ -53,6 +54,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { feedbackApi } from '../api'
 import WechatNavBar from '../components/common/WechatNavBar.vue'
 
@@ -75,14 +77,33 @@ const submit = async () => {
       content: content.value.trim()
     })
 
-    alert('提交成功，感谢你的反馈！')
+    // 使用Element Plus的消息提示，不打断用户
+    ElMessage({
+      message: '提交成功，感谢你的反馈！',
+      type: 'success',
+      duration: 3000,
+      showClose: true,
+      customClass: 'feedback-message-center'
+    })
+    
+    // 清空表单
     contact.value = ''
     category.value = 'GENERAL'
     content.value = ''
-    router.back()
+    
+    // 延迟返回，让用户看到成功提示
+    setTimeout(() => {
+      router.back()
+    }, 1500)
+    
   } catch (e) {
     console.error(e)
-    alert('提交失败，请稍后再试')
+    ElMessage({
+      message: '提交失败，请稍后再试',
+      type: 'error',
+      duration: 3000,
+      showClose: true
+    })
   } finally {
     submitting.value = false
   }
@@ -121,7 +142,23 @@ const submit = async () => {
 
 .submit {
   width: 100%;
-  margin-top: 16px;
+  margin-top: 20px;
+  height: 44px;
+  font-size: 16px;
+  font-weight: 500;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.submit:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.submit:active {
+  transform: translateY(0);
 }
 
 /* Element Plus 组件样式调整 */
@@ -169,6 +206,27 @@ const submit = async () => {
     padding: 16px 12px;
     padding-top: 60px;
   }
+}
+</style>
+
+<style>
+/* 全局样式：让消息提示居中显示 */
+.feedback-message-center {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  margin: 0 !important;
+  z-index: 9999 !important;
+}
+
+.feedback-message-center .el-message {
+  min-width: 200px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  font-size: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
 }
 </style>
 

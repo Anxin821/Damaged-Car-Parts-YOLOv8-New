@@ -337,7 +337,8 @@ onMounted(() => {
   backdrop-filter: blur(20px);
   border-radius: 20px;
   padding: 24px;
-  margin-bottom: 24px;
+  margin-top: 5px;
+  margin-bottom: 5px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
@@ -364,6 +365,10 @@ onMounted(() => {
   font-size: 14px;
   color: #1a202c;
   font-weight: 600;
+  white-space: normal;
+  word-wrap: break-word;
+  flex: 1;
+  text-align: right;
 }
 
 .brand-display {
@@ -404,7 +409,7 @@ onMounted(() => {
   backdrop-filter: blur(20px);
   border-radius: 20px;
   padding: 24px;
-  margin-bottom: 24px;
+  margin-bottom: 0px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.3);
 }

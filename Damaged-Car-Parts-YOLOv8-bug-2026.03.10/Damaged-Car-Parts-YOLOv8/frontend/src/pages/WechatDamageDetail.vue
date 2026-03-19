@@ -13,7 +13,7 @@
       </div>
 
       <!-- 车辆基本信息 -->
-      <div class="vehicle-section">
+      <div class="vehicle-section" style="margin-top: 30px;">
         <h2 class="section-title">一、车辆基本信息</h2>
         <div class="vehicle-info-grid">
           <div class="info-row">
@@ -29,7 +29,7 @@
           <div class="info-row">
             <div class="info-field">
               <span class="field-label">定损单号</span>
-              <span class="field-value">{{ damageInfo.id }}</span>
+              <span class="field-value" style="text-align: right; flex: 1;">{{ damageInfo.id }}</span>
             </div>
             <div class="info-field">
               <span class="field-label">定损时间</span>
@@ -81,7 +81,7 @@
       
       <!-- AI专业分析 -->
       <div class="ai-analysis-section">
-        <h2 class="section-title">四、AI专业分析评估</h2>
+        <h2 class="section-title">三、AI专业分析评估</h2>
         
         <!-- 加载状态 -->
         <div v-if="llmLoading" class="analysis-loading">
@@ -157,7 +157,7 @@
 
       <!-- 维修预算明细 -->
       <div class="budget-section" v-if="damageInfo.budgetDetails.length > 0">
-        <h2 class="section-title">五、维修预算明细</h2>
+        <h2 class="section-title">四、维修预算明细</h2>
         <div class="budget-table">
           <table class="budget-table-content">
             <thead>
@@ -200,8 +200,8 @@
       </div>
 
       <!-- 评估结论 -->
-      <div class="conclusion-section">
-        <h2 class="section-title">六、评估结论</h2>
+      <div class="conclusion-section" style="margin-bottom: -20px;">
+        <h2 class="section-title">五、评估结论</h2>
         <div class="conclusion-content">
           <div class="conclusion-item">
             <span class="conclusion-label">损伤等级：</span>
@@ -1351,7 +1351,7 @@ onMounted(() => {
 
 @media (max-width: 480px) {
   .page-content {
-    padding: 54px 12px 30px;
+    padding: 54px 10px 30px;
   }
   
   .report-meta {
@@ -1370,5 +1370,26 @@ onMounted(() => {
   .budget-table-content td {
     padding: 10px 8px;
   }
+}
+
+.vehicle-section {
+  margin-top: 35px !important;
+  margin-bottom: 10px;
+}
+
+.damage-photo-section {
+  margin-bottom: 10px;
+}
+
+.ai-analysis-section {
+  margin-bottom: 10px;
+}
+
+.budget-section {
+  margin-bottom: 10px;
+}
+
+.conclusion-section {
+  margin-bottom: 10px;
 }
 </style>
