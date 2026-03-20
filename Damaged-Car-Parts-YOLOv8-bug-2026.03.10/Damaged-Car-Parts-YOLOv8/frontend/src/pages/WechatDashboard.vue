@@ -50,6 +50,15 @@
               <el-tag :type="getStatusTagType(record.statusClass)" size="small">
                 {{ record.status }}
               </el-tag>
+              <el-button 
+                type="danger" 
+                size="small" 
+                class="delete-btn"
+                @click.stop="deleteRecord(record)"
+                :loading="record.deleting"
+              >
+                删除
+              </el-button>
             </div>
           </div>
         </div>
@@ -69,6 +78,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDetectionStore } from '../store/detection'
 import { historyApi } from '../api/history'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import WechatNavBar from '../components/common/WechatNavBar.vue'
 
 const router = useRouter()
@@ -172,6 +182,45 @@ const getStatusTagType = (statusClass) => {
 
 const viewRecord = (record) => {
   router.push(`/damage-detail/${record.taskId}`)
+}
+
+// 删除记录
+const deleteRecord = async (record) => {
+  try {
+    // 显示确认对话框
+    await ElMessageBox.confirm(
+      `确定要删除这条定损记录吗？此操作不可恢复。`,
+      '确认删除',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+    
+    // 设置删除状态
+    record.deleting = true
+    
+    // 调用删除API
+    await historyApi.deleteHistory(record.taskId)
+    
+    // 从本地列表中移除
+    const index = historyRecords.value.findIndex(r => r.taskId === record.taskId)
+    if (index > -1) {
+      historyRecords.value.splice(index, 1)
+    }
+    
+    // 显示成功消息
+    ElMessage.success('删除成功')
+    
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除失败:', error)
+      ElMessage.error('删除失败，请重试')
+    }
+  } finally {
+    record.deleting = false
+  }
 }
 </script>
 
@@ -309,6 +358,15 @@ const viewRecord = (record) => {
   font-size: 16px;
   font-weight: 700;
   color: #F56C6C;
+}
+
+.delete-btn {
+  margin-top: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 @media (max-width: 375px) {

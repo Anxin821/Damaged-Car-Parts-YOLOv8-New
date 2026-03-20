@@ -93,40 +93,16 @@ def create_feedback_table_if_not_exists():
             CREATE TABLE IF NOT EXISTS task_images (
                 id INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
                 task_id VARCHAR(36) NOT NULL COMMENT '关联的检测任务ID',
-                image_id VARCHAR(50) NOT NULL COMMENT '图像唯一标识符（如img_0, img_1）',
-                image_url TEXT NOT NULL COMMENT '图像的Base64编码URL',
-                thumb_url TEXT COMMENT '缩略图URL（预留字段）',
-                original_path TEXT COMMENT '原始图片本地存储路径',
-                annotated_path TEXT COMMENT '标注图片本地存储路径',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                image_type ENUM('original', 'yolo_annotated', 'damage_marked') DEFAULT 'original' COMMENT '图片类型',
+                image_url VARCHAR(500) NOT NULL COMMENT '图片URL地址',
+                original_url VARCHAR(500) COMMENT '原始图片地址',
+                annotated_url VARCHAR(500) COMMENT 'YOLO标注后图片地址',
                 
                 INDEX idx_task_id (task_id),
-                INDEX idx_image_id (image_id),
+                INDEX idx_image_type (image_type),
                 FOREIGN KEY (task_id) REFERENCES assessment_tasks(task_id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci 
-            COMMENT='检测任务图像表 - 存储每个检测任务上传的图像信息'
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS damage_regions (
-                id INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
-                task_id VARCHAR(36) NOT NULL COMMENT '关联的检测任务ID',
-                region_id VARCHAR(50) NOT NULL COMMENT '损伤区域唯一标识符（如img_0_r0, img_0_r1）',
-                image_id VARCHAR(50) NOT NULL COMMENT '关联的图像ID',
-                bbox VARCHAR(50) COMMENT '边界框坐标（x1,y1,x2,y2格式）',
-                damage_type VARCHAR(50) COMMENT '标准化的损伤类型（GLASS_DAMAGE/PAINT_DAMAGE等）',
-                damage_type_label VARCHAR(100) COMMENT '原始损伤标签（如damaged headlight）',
-                severity_level VARCHAR(20) COMMENT '严重程度等级（LOW/MEDIUM/HIGH）',
-                part_code VARCHAR(100) COMMENT '零部件代码或名称',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                
-                INDEX idx_task_id (task_id),
-                INDEX idx_region_id (region_id),
-                INDEX idx_image_id (image_id),
-                INDEX idx_damage_type (damage_type),
-                FOREIGN KEY (task_id) REFERENCES assessment_tasks(task_id) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci 
-            COMMENT='损伤区域详情表 - 存储YOLO检测到的每个损伤区域的详细信息'
+            COMMENT='任务图片表 - 存储评估相关的图片文件信息'
         """)
         
         connection.commit()
@@ -331,7 +307,10 @@ def _run_detection_task(task_id: str, files_bytes: List[bytes]):
       # 在图片上绘制标注
       annotated_bgr = bgr.copy()
       for box, cls, conf in zip(boxes, classes, confidences):
-        x1, y1, x2, y2 = map(int, box)
+        # YOLO输出格式: [left, top, width, height] -> 转换为 [x1, y1, x2, y2]
+        left, top, width, height = map(int, box)
+        x1, y1 = left, top
+        x2, y2 = left + width, top + height
         damage_type = _map_damage_type(cls)
         all_damage_types.add(damage_type)
         
@@ -373,10 +352,16 @@ def _run_detection_task(task_id: str, files_bytes: List[bytes]):
       img_buffer = io.BytesIO()
       pil.save(img_buffer, format='JPEG', quality=85)
       img_b64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+
+      # 将标注图片也转换为base64，用于前端切换显示
+      annotated_buffer = io.BytesIO()
+      annotated_pil.save(annotated_buffer, format='JPEG', quality=85)
+      annotated_b64 = base64.b64encode(annotated_buffer.getvalue()).decode('utf-8')
       
       images_payload.append({
         "id": image_id,
         "image_url": f"data:image/jpeg;base64,{img_b64}",
+        "annotated_image_url": f"data:image/jpeg;base64,{annotated_b64}",
         "thumb_url": None,
         "original_path": original_filepath,
         "annotated_path": annotated_filepath,
@@ -414,49 +399,62 @@ def _run_detection_task(task_id: str, files_bytes: List[bytes]):
           json.dumps(sorted(list(all_damage_types)))
         ))
         
-        # 插入图像记录（包含本地路径）
+        # 插入图像记录（使用新的表结构）
         for img in images_payload:
           cursor.execute("""
             INSERT INTO task_images 
-            (task_id, image_id, image_url, thumb_url, original_path, annotated_path, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            (task_id, image_id, image_url, original_path, annotated_path)
+            VALUES (%s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
             image_url = VALUES(image_url),
-            thumb_url = VALUES(thumb_url),
             original_path = VALUES(original_path),
             annotated_path = VALUES(annotated_path)
           """, (
             task_id,
-            img["id"],
+            img.get("id", f"img_{len(images_payload)}"),
             img["image_url"],
-            img["thumb_url"],
-            img["original_path"],
-            img["annotated_path"]
+            img.get("original_path", ""),
+            img.get("annotated_path", "")
           ))
         
-        # 插入损伤区域记录
-        for region in regions_payload:
-          cursor.execute("""
-            INSERT INTO damage_regions 
-            (task_id, region_id, image_id, bbox, damage_type, 
-             damage_type_label, severity_level, part_code, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
-            ON DUPLICATE KEY UPDATE
-            bbox = VALUES(bbox),
-            damage_type = VALUES(damage_type),
-            damage_type_label = VALUES(damage_type_label),
-            severity_level = VALUES(severity_level),
-            part_code = VALUES(part_code)
-          """, (
-            task_id,
-            region["id"],
-            region["image_id"],
-            region["bbox"],
-            region["damage_type"],
-            region["damage_type_label"],
-            region["severity_level"],
-            region["part_code"]
-          ))
+        # 插入损伤部位记录
+        for i, region in enumerate(regions_payload):
+            # 映射严重程度
+            severity_mapping = {
+                "LOW": "light",
+                "MEDIUM": "medium", 
+                "HIGH": "severe"
+            }
+            damage_level = severity_mapping.get(region.get('severity_level', 'MEDIUM'), 'medium')
+            
+            # 映射维修优先级
+            priority_mapping = {
+                "LOW": "low",
+                "MEDIUM": "medium",
+                "HIGH": "high"
+            }
+            repair_priority = priority_mapping.get(region.get('severity_level', 'MEDIUM'), 'medium')
+            
+            cursor.execute("""
+                INSERT INTO damage_regions 
+                (task_id, region_id, image_id, bbox, damage_type, damage_type_label, severity_level, part_code)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                bbox = VALUES(bbox),
+                damage_type = VALUES(damage_type),
+                damage_type_label = VALUES(damage_type_label),
+                severity_level = VALUES(severity_level),
+                part_code = VALUES(part_code)
+            """, (
+                task_id,
+                region.get('id', f'region_{i}'),
+                region.get('image_id', 'img_0'),
+                region.get('bbox', ''),
+                region.get('damage_type', ''),
+                region.get('damage_type_label', ''),
+                region.get('severity_level', ''),
+                region.get('part_code', '')
+            ))
         
         connection.commit()
         cursor.close()
@@ -529,20 +527,35 @@ def get_detection_result(task_id: str):
           """, (task_id,))
           images = cursor.fetchall()
           
-          # 查询损伤区域记录
+          # 查询损伤部位记录
           cursor.execute("""
-            SELECT * FROM damage_regions 
+            SELECT * FROM damage_parts 
             WHERE task_id = %s
+            ORDER BY sort_order
           """, (task_id,))
           regions = cursor.fetchall()
           
           # 构建响应数据
           images_payload = []
           for img in images:
+            annotated_image_url = None
+            try:
+              annotated_url = img.get("annotated_url")
+              if annotated_url and annotated_url.startswith("http"):
+                annotated_image_url = annotated_url
+              elif annotated_url and os.path.exists(annotated_url):
+                with open(annotated_url, "rb") as f:
+                  annotated_b64 = base64.b64encode(f.read()).decode("utf-8")
+                annotated_image_url = f"data:image/jpeg;base64,{annotated_b64}"
+            except Exception as e:
+              print(f"[Database] Failed to read annotated image for task {task_id}: {e}")
+
             images_payload.append({
-              "id": img["image_id"],
+              "id": img["id"],
               "image_url": img["image_url"],
-              "thumb_url": img["thumb_url"],
+              "original_url": img.get("original_url", img["image_url"]),
+              "annotated_image_url": annotated_image_url,
+              "image_type": img.get("image_type", "original")
             })
           
           regions_payload = []
@@ -677,8 +690,32 @@ def get_detection_detail(task_id: str):
 
 @app.delete('/api/detection/history/{task_id}')
 def delete_detection_history(task_id: str):
+  # 删除内存中的数据
   if task_id in _tasks:
     del _tasks[task_id]
+  
+  # 删除数据库中的数据
+  try:
+    connection = get_db_connection()
+    if connection:
+      cursor = connection.cursor()
+      
+      # 手动删除所有相关表的数据（按依赖关系顺序）
+      # 1. 先删除子表数据
+      cursor.execute("DELETE FROM repair_items WHERE assessment_id IN (SELECT id FROM damage_assessments WHERE task_id = %s)", (task_id,))
+      cursor.execute("DELETE FROM damage_regions WHERE task_id = %s", (task_id,))
+      cursor.execute("DELETE FROM task_images WHERE task_id = %s", (task_id,))
+      cursor.execute("DELETE FROM damage_assessments WHERE task_id = %s", (task_id,))
+      # 2. 最后删除主表数据
+      cursor.execute("DELETE FROM assessment_tasks WHERE task_id = %s", (task_id,))
+      
+      connection.commit()
+      cursor.close()
+      connection.close()
+      print(f"[Database] Deleted task {task_id} and all related data from database")
+  except Exception as e:
+    print(f"[Database Error] Failed to delete task {task_id}: {e}")
+  
   return {"success": True}
 
 
@@ -856,6 +893,61 @@ class AnalyzeResponse(BaseModel):
     model: str
     timestamp: str
 
+
+@router.get('/api/llm/analyze', response_model=AnalyzeResponse)
+async def get_saved_llm_analysis(task_id: str):
+    """从数据库读取已保存的AI分析结果（damage_assessments.ai_analysis）"""
+    try:
+        connection = get_db_connection()
+        if not connection:
+            raise HTTPException(status_code=500, detail="数据库连接失败")
+
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT ai_analysis, completed_at
+            FROM damage_assessments
+            WHERE task_id = %s
+            LIMIT 1
+            """,
+            (task_id,)
+        )
+        row = cursor.fetchone()
+
+        if not row or not row.get("ai_analysis"):
+            raise HTTPException(status_code=404, detail=f"No saved analysis for task {task_id}")
+
+        raw = row.get("ai_analysis")
+        if isinstance(raw, (dict, list)):
+            analysis = raw
+        else:
+            analysis = json.loads(raw)
+
+        ts = row.get("completed_at")
+        timestamp = ts.isoformat() + "Z" if ts else datetime.utcnow().isoformat() + "Z"
+
+        return {
+            "task_id": task_id,
+            "analysis": analysis,
+            "model": "saved",
+            "timestamp": timestamp,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取AI分析失败: {str(e)}")
+    finally:
+        try:
+            if cursor:
+                cursor.close()
+        except Exception:
+            pass
+        try:
+            if connection:
+                connection.close()
+        except Exception:
+            pass
+
 @router.post('/api/llm/analyze', response_model=AnalyzeResponse)
 async def analyze_with_llm(task_id: str):
     """
@@ -886,10 +978,11 @@ async def analyze_with_llm(task_id: str):
                     """, (task_id,))
                     images = cursor.fetchall()
                     
-                    # 查询损伤区域记录
+                    # 查询损伤部位记录
                     cursor.execute("""
-                        SELECT * FROM damage_regions 
+                        SELECT * FROM damage_parts 
                         WHERE task_id = %s
+                        ORDER BY sort_order
                     """, (task_id,))
                     regions = cursor.fetchall()
                     
@@ -897,9 +990,11 @@ async def analyze_with_llm(task_id: str):
                     images_payload = []
                     for img in images:
                         images_payload.append({
-                            "id": img["image_id"],
+                            "id": img["id"],
                             "image_url": img["image_url"],
-                            "thumb_url": img["thumb_url"],
+                            "original_url": img.get("original_url", img["image_url"]),
+                            "annotated_url": img.get("annotated_url"),
+                            "image_type": img.get("image_type", "original")
                         })
                     
                     regions_payload = []
@@ -1177,33 +1272,7 @@ async def analyze_with_llm(task_id: str):
                     total_repair_time
                 ))
                 
-                # 如果有损伤区域信息，也保存到damage_regions表
-                if damage_level:
-                    for part, severity in damage_level.items():
-                        # 映射严重程度
-                        severity_mapping = {
-                            "轻微": "LOW",
-                            "中等": "MEDIUM", 
-                            "严重": "HIGH",
-                            "非常严重": "SEVERE",
-                            "危急": "CRITICAL"
-                        }
-                        db_severity = severity_mapping.get(severity, "MEDIUM")
-                        
-                        cursor.execute("""
-                            INSERT INTO damage_regions 
-                            (task_id, region_id, image_id, damage_type, damage_type_label, 
-                             severity_level, part_code, created_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                        """, (
-                            task_id,  # 使用task_id而不是assessment_id
-                            f"llm_{len(damage_level)}",  # 生成region_id
-                            "main_image",  # 默认图像ID
-                            "STRUCTURAL_DAMAGE",  # 损伤类型
-                            part,  # 损伤标签
-                            db_severity,  # 严重程度
-                            part  # 部件代码
-                        ))
+                # 损伤区域信息已经在检测阶段保存到damage_regions表，这里不需要重复保存
                 
                 connection.commit()
                 cursor.close()

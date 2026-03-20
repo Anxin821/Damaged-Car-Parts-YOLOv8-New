@@ -96,47 +96,47 @@ class DamageAssessmentDB:
             if cursor:
                 cursor.close()
     
-    def add_damage_region(self, assessment_id, image_id, damage_type, damage_part, 
-                         severity_level, confidence, bbox_x, bbox_y, bbox_width, bbox_height,
-                         repair_priority=0):
-        """添加损伤区域"""
+    def add_damage_region(self, task_id, part_name, damage_level, repair_priority,
+                         detection_confidence=0.85, bbox_x=0, bbox_y=0, bbox_width=0, bbox_height=0,
+                         sort_order=0):
+        """添加损伤部位"""
         try:
             cursor = self.connection.cursor()
             cursor.execute("""
-                INSERT INTO damage_regions 
-                (assessment_id, image_id, damage_type, damage_part, severity_level,
-                 confidence, bbox_x, bbox_y, bbox_width, bbox_height, repair_priority)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (assessment_id, image_id, damage_type, damage_part, severity_level,
-                 confidence, bbox_x, bbox_y, bbox_width, bbox_height, repair_priority))
+                INSERT INTO damage_parts 
+                (task_id, part_name, damage_level, repair_priority, 
+                 detection_confidence, bbox_x, bbox_y, bbox_width, bbox_height, sort_order)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (task_id, part_name, damage_level, repair_priority,
+                 detection_confidence, bbox_x, bbox_y, bbox_width, bbox_height, sort_order))
             
             region_id = cursor.lastrowid
             self.connection.commit()
-            print(f"✅ 添加损伤区域成功: {damage_type} - {damage_part}")
+            print(f"✅ 添加损伤部位成功: {part_name} - {damage_level}")
             return region_id
             
         except Error as e:
-            print(f"❌ 添加损伤区域失败: {e}")
+            print(f"❌ 添加损伤部位失败: {e}")
             return None
         finally:
             if cursor:
                 cursor.close()
     
-    def get_damage_regions_by_assessment(self, assessment_id):
-        """获取定损记录的所有损伤区域"""
+    def get_damage_regions_by_assessment(self, task_id):
+        """获取任务的所有损伤部位"""
         try:
             cursor = self.connection.cursor(dictionary=True)
             cursor.execute("""
-                SELECT * FROM damage_regions 
-                WHERE assessment_id = %s 
-                ORDER BY repair_order
-            """, (assessment_id,))
+                SELECT * FROM damage_parts 
+                WHERE task_id = %s 
+                ORDER BY sort_order
+            """, (task_id,))
             
             results = cursor.fetchall()
             return results
             
         except Error as e:
-            print(f"❌ 查询损伤区域失败: {e}")
+            print(f"❌ 查询损伤部位失败: {e}")
             return []
         finally:
             if cursor:

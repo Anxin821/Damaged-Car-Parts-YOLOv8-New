@@ -5,13 +5,6 @@
 
     <!-- 主内容区域 -->
     <div class="page-content">
-      <!-- 报告头部信息 -->
-      <div>
-        <div>
-          <h1></h1>
-        </div>
-      </div>
-
       <!-- 车辆基本信息 -->
       <div class="vehicle-section" style="margin-top: 30px;">
         <h2 class="section-title">一、车辆基本信息</h2>
@@ -40,23 +33,10 @@
       </div>
 
       <!-- 损伤照片 -->
-      <div class="damage-photo-section" v-if="damageInfo.currentImage">
+      <div class="damage-photo-section" v-if="getCurrentImage()">
         <h2 class="section-title">二、损伤照片记录</h2>
         <div class="photo-grid">
-          <div class="photo-item" @click="openImagePreview">
-            <div class="photo-wrapper">
-              <el-image 
-                :src="damageInfo.currentImage" 
-                alt="损伤照片" 
-                class="damage-photo"
-                fit="contain"
-                @error="onImageError"
-              />
-              <div class="photo-overlay">
-                <div class="overlay-text">点击查看大图</div>
-              </div>
-            </div>
-            <div class="photo-caption">图1：车辆损伤整体视图</div>
+          <div class="photo-item">
             <!-- 标注图切换按钮 -->
             <div class="image-toggle-buttons">
               <button 
@@ -74,6 +54,16 @@
                 YOLO标注图
               </button>
             </div>
+            <div class="photo-wrapper">
+              <el-image 
+                :src="getCurrentImage()" 
+                alt="损伤照片" 
+                class="damage-photo"
+                fit="contain"
+                @error="onImageError"
+              />
+            </div>
+            <div class="photo-caption">图1：车辆损伤整体视图 ({{ currentImageType === 'original' ? '原图' : 'YOLO标注图' }})</div>
           </div>
         </div>
       </div>
@@ -220,47 +210,30 @@
             <span class="conclusion-value">{{ getSafetyRating() }}</span>
           </div>
         </div>
-      </div>
-
-      <!-- 无数据状态 -->
-      <div v-if="!hasData" class="empty-page">
-        <div class="empty-illustration">
-          <div class="illustration-icon">📋</div>
-        </div>
-        <div class="empty-content">
-          <h3 class="empty-title">暂无定损数据</h3>
-          <p class="empty-description">请先进行车辆损伤检测</p>
-          <el-button type="primary" size="large" @click="goToDetection">
-            <el-icon><Upload /></el-icon>
-            开始检测
-          </el-button>
+        
+        <!-- 导出功能 -->
+        <div class="export-section">
+          <div class="export-buttons">
+            <el-button 
+              type="warning" 
+              :icon="Picture" 
+              @click="exportImage"
+              :loading="exportingImage"
+            >
+              预修车分析
+            </el-button>
+            <el-button 
+              type="primary" 
+              :icon="Download" 
+              @click="exportPDF"
+              :loading="exportingPDF"
+            >
+              导出PDF报告
+            </el-button>
+          </div>
         </div>
       </div>
     </div>
-
-    <!-- 图片预览弹窗 -->
-    <el-dialog
-      v-model="showImagePreview"
-      width="95%"
-      :show-close="false"
-      class="image-preview-dialog"
-    >
-      <template #header="{ close }">
-        <div class="preview-header">
-          <span class="preview-title">损伤照片详细视图</span>
-          <el-button @click="close" :icon="Close" circle size="small" />
-        </div>
-      </template>
-      <div class="preview-content">
-        <div class="preview-image-container">
-          <el-image 
-            :src="damageInfo.currentImage" 
-            class="preview-image"
-            fit="contain"
-          />
-        </div>
-      </div>
-    </el-dialog>
   </div>
 </template>
 
@@ -268,6 +241,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useDetectionStore } from '../store/detection'
+import { ElMessage } from 'element-plus'
 import WechatNavBar from '../components/common/WechatNavBar.vue'
 import { 
   ArrowLeft, 
@@ -285,16 +259,20 @@ import {
   ArrowDown,
   InfoFilled,
   WarningFilled,
-  CircleCheckFilled
+  CircleCheckFilled,
+  Download,
+  Picture
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
 const detectionStore = useDetectionStore()
-const imageZoomed = ref(false)
 const currentImageIndex = ref(0)
-const showImagePreview = ref(false)
 const currentImageType = ref('original') // 'original' or 'yolo'
+
+// 导出功能状态
+const exportingPDF = ref(false)
+const exportingImage = ref(false)
 
 // 从 store 获取 LLM 分析状态
 const llmLoading = computed(() => detectionStore.llmLoading)
@@ -449,23 +427,6 @@ const damageInfo = computed(() => {
 
   const totalBudget = budgetDetails.reduce((sum, item) => sum + item.total, 0)
 
-  // 处理图片
-  const originalImages = (result.images || [])
-    .map(img => img.image_url || '')
-    .filter(url => url)
-  
-  const yoloImages = (result.images || [])
-    .map(img => img.annotated_image_url || '')
-    .filter(url => url)
-
-  const getCurrentImage = () => {
-    if (currentImageType.value === 'yolo') {
-      return yoloImages[currentImageIndex.value] || yoloImages[0] || ''
-    } else {
-      return originalImages[currentImageIndex.value] || originalImages[0] || ''
-    }
-  }
-
   return {
     id: result.taskId || 'DS20260302001',
     carModel: `${carModelInfo.value.brand} ${carModelInfo.value.series} ${carModelInfo.value.model}`,
@@ -479,7 +440,6 @@ const damageInfo = computed(() => {
   }
 })
 
-const openImagePreview = () => { showImagePreview.value = true }
 const goToDetection = () => { router.push('/detection') }
 
 // 图片切换函数
@@ -491,9 +451,476 @@ const switchToYolo = () => {
   currentImageType.value = 'yolo'
 }
 
+// 获取原始图片和YOLO图片的响应式数据
+const originalImages = computed(() => {
+  const result = detectionStore.detectionResult
+  return (result?.images || [])
+    .map(img => img.image_url || '')
+    .filter(url => url)
+})
+
+const yoloImages = computed(() => {
+  const result = detectionStore.detectionResult
+  return (result?.images || [])
+    .map(img => img.annotated_image_url || img.thumb_url || img.image_url || '')
+    .filter(url => url)
+})
+
+// 获取当前图片的函数
+const getCurrentImage = () => {
+  if (currentImageType.value === 'yolo') {
+    return yoloImages.value[currentImageIndex.value] || yoloImages.value[0] || ''
+  } else {
+    return originalImages.value[currentImageIndex.value] || originalImages.value[0] || ''
+  }
+}
+
+// 导出功能实现
+const exportPDF = async () => {
+  exportingPDF.value = true
+  try {
+    // 生成PDF报告内容
+    const reportData = generateReportData()
+    const htmlContent = await generatePDFContent(reportData)
+    
+    // 使用iframe和window.print()来生成PDF
+    const printWindow = window.open('', '_blank')
+    printWindow.document.write(htmlContent)
+    printWindow.document.close()
+    
+    // 等待内容加载完成
+    await new Promise(resolve => {
+      setTimeout(() => {
+        printWindow.focus()
+        printWindow.print()
+        
+        // 关闭打印窗口
+        setTimeout(() => {
+          printWindow.close()
+        }, 1000)
+        
+        resolve()
+      }, 500)
+    })
+    
+    ElMessage.success('PDF导出窗口已打开，请在打印对话框中选择"保存为PDF"')
+  } catch (error) {
+    console.error('PDF导出失败:', error)
+    ElMessage.error('PDF导出失败，请重试')
+  } finally {
+    exportingPDF.value = false
+  }
+}
+
+const exportImage = async () => {
+  // 跳转到预修车分析页面
+  router.push('/pre-repair-analysis')
+}
+
+// 生成报告数据
+const generateReportData = () => {
+  return {
+    taskId: damageInfo.value.id,
+    carModel: damageInfo.value.carModel,
+    detectionTime: damageInfo.value.detectionTime,
+    vehicleInfo: vehicleInfo.value,
+    damageDetails: damageInfo.value.damageDetails,
+    budgetDetails: damageInfo.value.budgetDetails,
+    totalBudget: damageInfo.value.totalBudget,
+    llmAnalysis: llmAnalysis.value,
+    conclusion: {
+      damageLevel: getOverallDamageLevel(),
+      repairMethod: getRecommendedRepairMethod(),
+      repairTime: getEstimatedRepairTime(),
+      safetyRating: getSafetyRating()
+    },
+    // 添加完整的页面数据
+    currentImage: getCurrentImage(),
+    currentImageType: currentImageType.value,
+    originalImages: originalImages.value,
+    yoloImages: yoloImages.value,
+    allAnalysisData: {
+      damageLevel: llmAnalysis.value?.analysis?.damage_level || {},
+      repairSuggestion: llmAnalysis.value?.analysis?.repair_suggestion || '',
+      costEstimate: llmAnalysis.value?.analysis?.cost_estimate || '',
+      safetyTips: llmAnalysis.value?.analysis?.safety_tips || ''
+    },
+    // 添加文件名格式
+    fileName: `定损报告-${damageInfo.value.id}`
+  }
+}
+
+// 生成PDF内容（使用更好的方法）
+const generatePDFContent = async (reportData) => {
+  // 创建一个简化的HTML模板，包含文件名
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>${reportData.fileName}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+          font-family: 'Microsoft YaHei', 'SimSun', sans-serif; 
+          font-size: 14px; 
+          line-height: 1.6; 
+          color: #333; 
+          background: #fff;
+          padding: 20px;
+        }
+        .container { 
+          max-width: 800px; 
+          margin: 0 auto; 
+          background: #fff; 
+          border: 1px solid #ddd; 
+          border-radius: 8px; 
+          overflow: hidden; 
+        }
+        .header { 
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+          color: white; 
+          padding: 30px 20px; 
+          text-align: center; 
+        }
+        .header h1 { 
+          font-size: 24px; 
+          font-weight: bold; 
+          margin-bottom: 10px; 
+        }
+        .header p { 
+          font-size: 16px; 
+          margin: 5px 0; 
+          opacity: 0.9; 
+        }
+        .content { 
+          padding: 30px 20px; 
+        }
+        .section { 
+          margin-bottom: 30px; 
+        }
+        .section-title { 
+          font-size: 18px; 
+          font-weight: bold; 
+          color: #333; 
+          margin-bottom: 15px; 
+          padding-bottom: 8px; 
+          border-bottom: 2px solid #667eea; 
+        }
+        .info-grid { 
+          display: grid; 
+          grid-template-columns: 1fr 1fr; 
+          gap: 15px; 
+          margin-bottom: 20px; 
+        }
+        .info-item { 
+          padding: 10px; 
+          background: #f8f9fa; 
+          border-radius: 6px; 
+        }
+        .info-label { 
+          font-weight: bold; 
+          color: #555; 
+          margin-bottom: 5px; 
+        }
+        table { 
+          width: 100%; 
+          border-collapse: collapse; 
+          margin-bottom: 20px; 
+          font-size: 13px; 
+        }
+        th, td { 
+          border: 1px solid #ddd; 
+          padding: 12px 8px; 
+          text-align: left; 
+          vertical-align: top; 
+        }
+        th { 
+          background: #f8f9fa; 
+          font-weight: bold; 
+          color: #333; 
+        }
+        .total-row { 
+          background: #f0f0f0; 
+          font-weight: bold; 
+        }
+        .analysis-box { 
+          background: #f8f9fa; 
+          border: 1px solid #e9ecef; 
+          border-radius: 6px; 
+          padding: 15px; 
+          margin-bottom: 15px; 
+        }
+        .conclusion-item { 
+          display: flex; 
+          justify-content: space-between; 
+          padding: 10px 0; 
+          border-bottom: 1px solid #eee; 
+        }
+        .conclusion-item:last-child { 
+          border-bottom: none; 
+        }
+        .image-section { 
+          text-align: center; 
+          margin-bottom: 20px; 
+        }
+        .image-container { 
+          display: grid; 
+          grid-template-columns: 1fr 1fr; 
+          gap: 20px; 
+          margin-bottom: 20px; 
+        }
+        .image-column { 
+          display: flex; 
+          flex-direction: column; 
+          gap: 15px; 
+        }
+        .image-item { 
+          text-align: center; 
+          border: 1px solid #ddd; 
+          border-radius: 8px; 
+          padding: 10px; 
+          background: #f8f9fa; 
+        }
+        .image-item img { 
+          max-width: 100%; 
+          max-height: 200px; 
+          border-radius: 4px; 
+          margin-bottom: 10px; 
+        }
+        .image-caption { 
+          font-size: 12px; 
+          color: #666; 
+          margin-top: 5px; 
+        }
+        .image-column h5 {
+          font-size: 16px;
+          font-weight: bold;
+          color: #333;
+          margin-bottom: 15px;
+          text-align: center;
+        }
+        .footer { 
+          text-align: center; 
+          padding: 20px; 
+          font-size: 12px; 
+          color: #666; 
+          border-top: 1px solid #ddd; 
+          margin-top: 30px; 
+        }
+        @media print {
+          body { padding: 0; }
+          .container { box-shadow: none; border: none; }
+          @page {
+            size: A4;
+            margin: 1cm;
+          }
+          .image-item img {
+            max-width: 250px;
+            max-height: 180px;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>车辆定损评估报告</h1>
+          <p>报告编号：${reportData.taskId}</p>
+          <p>检测时间：${reportData.detectionTime}</p>
+        </div>
+        
+        <div class="content">
+          <div class="section">
+            <div class="section-title">一、车辆信息</div>
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">车辆品牌</div>
+                <div>${reportData.vehicleInfo.brand || '未知'}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">车辆型号</div>
+                <div>${reportData.vehicleInfo.model || '未知'}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">二、图片信息</div>
+            <div class="info-grid">
+              <div class="conclusion-item">
+                <div class="info-label">原图数量</div>
+                <div>${reportData.originalImages.length}</div>
+              </div>
+              <div class="conclusion-item">
+                <div class="info-label">标注图数量</div>
+                <div>${reportData.yoloImages.length}</div>
+              </div>
+            </div>
+            
+            <!-- 显示实际图片 -->
+            <div class="image-section">
+              <h4>车辆损伤图片</h4>
+              <div class="image-container">
+                <!-- 左边：原图 -->
+                <div class="image-column">
+                  <h5>原图</h5>
+                  ${reportData.originalImages.map((url, index) => `
+                    <div class="image-item">
+                      <img src="${url}" alt="原图${index + 1}" />
+                      <div class="image-caption">原图${index + 1}</div>
+                    </div>
+                  `).join('')}
+                </div>
+                
+                <!-- 右边：YOLO标注图 -->
+                <div class="image-column">
+                  <h5>YOLO标注图</h5>
+                  ${reportData.yoloImages.map((url, index) => `
+                    <div class="image-item">
+                      <img src="${url}" alt="YOLO标注图${index + 1}" />
+                      <div class="image-caption">YOLO标注图${index + 1}</div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">三、损伤详情</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>序号</th>
+                  <th>损伤部位</th>
+                  <th>损伤类型</th>
+                  <th>严重程度</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${reportData.damageDetails.map((detail, index) => `
+                  <tr>
+                    <td>${index + 1}</td>
+                    <td>${detail.location}</td>
+                    <td>${detail.type}</td>
+                    <td>${detail.level}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">四、维修预算</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>序号</th>
+                  <th>维修项目</th>
+                  <th>破损等级</th>
+                  <th>建议操作</th>
+                  <th>配件成本</th>
+                  <th>工时费</th>
+                  <th>小计</th>
+                  <th>备注</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${reportData.budgetDetails.map((item, index) => `
+                  <tr>
+                    <td>${index + 1}</td>
+                    <td>${item.item}</td>
+                    <td>${item.severity}</td>
+                    <td>${item.operation}</td>
+                    <td>¥${item.parts}</td>
+                    <td>¥${item.labor}</td>
+                    <td>¥${item.total}</td>
+                    <td>${item.notes}</td>
+                  </tr>
+                `).join('')}
+                <tr class="total-row">
+                  <td colspan="7">合计</td>
+                  <td>¥${reportData.totalBudget}</td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          ${reportData.llmAnalysis ? `
+            <div class="section">
+              <div class="section-title">五、AI专业分析</div>
+              
+              ${reportData.allAnalysisData.damageLevel && Object.keys(reportData.allAnalysisData.damageLevel).length > 0 ? `
+                <div class="analysis-box">
+                  <strong>损伤程度评估：</strong><br>
+                  ${Object.entries(reportData.allAnalysisData.damageLevel).map(([part, level]) => `${part}: ${level}`).join('<br>')}
+                </div>
+              ` : ''}
+              
+              ${reportData.allAnalysisData.repairSuggestion ? `
+                <div class="analysis-box">
+                  <strong>专业维修建议：</strong><br>
+                  ${reportData.allAnalysisData.repairSuggestion}
+                </div>
+              ` : ''}
+              
+              ${reportData.allAnalysisData.costEstimate ? `
+                <div class="analysis-box">
+                  <strong>维修费用估算：</strong><br>
+                  ${reportData.allAnalysisData.costEstimate}
+                </div>
+              ` : ''}
+              
+              ${reportData.allAnalysisData.safetyTips ? `
+                <div class="analysis-box">
+                  <strong>安全注意事项：</strong><br>
+                  ${reportData.allAnalysisData.safetyTips}
+                </div>
+              ` : ''}
+            </div>
+          ` : ''}
+          
+          <div class="section">
+            <div class="section-title">六、评估结论</div>
+            <div class="info-grid">
+              <div class="conclusion-item">
+                <div class="info-label">损伤等级</div>
+                <div>${reportData.conclusion.damageLevel}</div>
+              </div>
+              <div class="conclusion-item">
+                <div class="info-label">建议维修方式</div>
+                <div>${reportData.conclusion.repairMethod}</div>
+              </div>
+              <div class="conclusion-item">
+                <div class="info-label">预计维修周期</div>
+                <div>${reportData.conclusion.repairTime}</div>
+              </div>
+              <div class="conclusion-item">
+                <div class="info-label">安全评级</div>
+                <div>${reportData.conclusion.safetyRating}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="footer">
+          <p>此报告由车辆定损AI系统自动生成 | 生成时间：${new Date().toLocaleString('zh-CN')}</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `
+  
+  // 返回HTML内容，让浏览器处理PDF生成
+  return htmlContent
+}
+
 // 计算标注框样式
 const getBoxStyle = (bbox) => {
   if (!bbox) return {}
+  
   const coords = bbox.split(',').map(Number)
   if (coords.length !== 4) return {}
   
@@ -513,7 +940,23 @@ const getBoxColor = (index) => {
 }
 
 // 页面加载时检查是否有分析结果
-onMounted(() => {
+onMounted(async () => {
+  if (!hasData.value && taskId.value) {
+    try {
+      await detectionStore.getResult(taskId.value, { timeout: 60000, interval: 1000 })
+    } catch (err) {
+      console.error('获取检测结果失败:', err)
+    }
+  }
+
+  if (!llmAnalysis.value && taskId.value) {
+    try {
+      await detectionStore.fetchLLMAnalysis(taskId.value)
+    } catch (err) {
+      console.error('获取AI分析结果失败:', err)
+    }
+  }
+
   // 如果已经有分析结果，直接显示在页面上
   if (llmAnalysis.value) {
     console.log('页面加载时发现已有AI分析结果，直接显示')
@@ -699,7 +1142,7 @@ const getSafetyRating = () => {
 }
 
 const onImageError = (event) => {
-  event.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y1ZjdmYSIvPjx0ZXh0IHg9IjE1MCIgeT0iMTAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTA5Mzk5IiBmb250LXNpemU9IjE0Ij7nlKjmiLHnmoTmoLjlvankuI3phY3nvaE8L3RleHQ+PC9zdmc+'
+  event.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0i2Y1ZjdmYSIvPjx0ZXh0IHg9IjE1MCIgeT0iMTAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTA5Mzk5IiBmb250LXNpemU9IjE0Ij7nlKjmiLHnmoTmoLjlvankuI3phY3nvaE8L3RleHQ+PC9zdmc+'
 }
 
 // 获取风险系数（基于ML模型计算）
@@ -867,30 +1310,6 @@ onMounted(() => {
   object-fit: cover;
 }
 
-.photo-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.photo-wrapper:hover .photo-overlay {
-  opacity: 1;
-}
-
-.overlay-text {
-  color: white;
-  font-size: 14px;
-  font-weight: 500;
-}
-
 .photo-caption {
   padding: 12px;
   text-align: center;
@@ -974,7 +1393,6 @@ onMounted(() => {
   font-weight: 600;
   text-align: center;
   display: inline-block;
-  min-width: 60px;
 }
 
 .severity-badge.level-light {
@@ -1262,6 +1680,25 @@ onMounted(() => {
   font-size: 16px;
   color: #1a202c;
   font-weight: 600;
+}
+
+/* 导出功能样式 */
+.export-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.export-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.export-buttons .el-button {
+  min-width: 120px;
+  font-weight: 500;
 }
 
 /* ===== 空状态 ===== */

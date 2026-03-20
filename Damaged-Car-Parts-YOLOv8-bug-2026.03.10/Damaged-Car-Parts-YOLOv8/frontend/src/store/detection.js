@@ -92,6 +92,17 @@ export const useDetectionStore = defineStore('detection', () => {
     }
   }
 
+  const fetchLLMAnalysis = async (taskId) => {
+    error.value = null
+    try {
+      const result = await detectionApi.getLLMAnalysis(taskId)
+      llmAnalysis.value = result
+      return result
+    } catch (err) {
+      throw err
+    }
+  }
+
   const getResult = async (taskId, options) => {
     loading.value = true
     error.value = null
@@ -118,6 +129,10 @@ export const useDetectionStore = defineStore('detection', () => {
           bbox: region.bbox,
           cost: 0 // 成本在repair_items中
         }))
+      }
+
+      if (result?.images?.length > 0) {
+        currentImage.value = result.images[0].image_url
       }
       return result
     } catch (err) {
@@ -207,7 +222,8 @@ export const useDetectionStore = defineStore('detection', () => {
     fetchHistory,
     clearResult,
     selectDamage,
-    analyzeWithLLM
+    analyzeWithLLM,
+    fetchLLMAnalysis
   }
 }, {
   // 持久化配置
